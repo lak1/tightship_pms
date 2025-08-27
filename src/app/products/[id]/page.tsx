@@ -649,14 +649,14 @@ export default function ProductDetailPage() {
             </div>
 
             {/* Price History */}
-            {product.priceHistory && product.priceHistory.length > 0 && (
+            {product.price_history && product.price_history.length > 0 && (
               <div className="bg-white shadow rounded-lg p-6">
                 <h2 className="text-lg font-medium text-gray-900 mb-4 flex items-center">
                   <History className="mr-2 h-5 w-5" />
                   Recent Price Changes
                 </h2>
                 <div className="space-y-3">
-                  {product.priceHistory.slice(0, 5).map((history, index) => (
+                  {product.price_history.slice(0, 5).map((history, index) => (
                     <div key={index} className="text-sm">
                       <div className="flex justify-between items-center">
                         <span className="text-gray-700">

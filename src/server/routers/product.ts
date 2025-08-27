@@ -279,7 +279,7 @@ export const productRouter = createTRPCRouter({
       })
 
       // Create price history record
-      await ctx.db.pricesHistory.create({
+      await ctx.db.price_history.create({
         data: {
           productId,
           platformId,
@@ -318,10 +318,10 @@ export const productRouter = createTRPCRouter({
               effectiveTo: null,
             },
             include: {
-              platform: true,
+              platforms: true,
             },
           },
-          priceHistory: {
+          price_history: {
             orderBy: {
               createdAt: 'desc',
             },
@@ -430,7 +430,7 @@ export const productRouter = createTRPCRouter({
           if (!categoryName) continue
           
           // Check if category exists
-          let category = await ctx.db.category.findFirst({
+          let category = await ctx.db.categories.findFirst({
             where: {
               menuId,
               name: categoryName,
@@ -439,7 +439,7 @@ export const productRouter = createTRPCRouter({
           
           // Create if not exists
           if (!category) {
-            category = await ctx.db.category.create({
+            category = await ctx.db.categories.create({
               data: {
                 menuId,
                 name: categoryName,
@@ -453,7 +453,7 @@ export const productRouter = createTRPCRouter({
       }
 
       // Get platform IDs for price creation
-      const platforms = await ctx.db.platform.findMany({
+      const platforms = await ctx.db.platforms.findMany({
         where: {
           name: {
             in: ['Deliveroo', 'Uber Eats', 'Just Eat'],
