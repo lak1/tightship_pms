@@ -149,6 +149,7 @@ export const productRouter = createTRPCRouter({
       // Create base price record
       await ctx.db.prices.create({
         data: {
+          id: `price_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
           productId: product.id,
           price: input.basePrice.toString(),
           effectiveFrom: new Date(),
@@ -213,6 +214,7 @@ export const productRouter = createTRPCRouter({
         // Create new base price
         await ctx.db.prices.create({
           data: {
+            id: `price_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
             productId: id,
             price: data.basePrice.toString(),
             effectiveFrom: new Date(),
@@ -271,6 +273,7 @@ export const productRouter = createTRPCRouter({
       // Create new price record
       const newPrice = await ctx.db.prices.create({
         data: {
+          id: `price_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
           productId,
           platformId: platformId || null,
           price: price.toString(),
@@ -281,6 +284,7 @@ export const productRouter = createTRPCRouter({
       // Create price history record
       await ctx.db.price_history.create({
         data: {
+          id: `history_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
           productId,
           platformId,
           oldPrice: product.basePrice,
@@ -535,6 +539,7 @@ export const productRouter = createTRPCRouter({
           // Base price
           if (productData.basePrice) {
             pricesToCreate.push({
+              id: `price_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
               productId: product.id,
               price: productData.basePrice.toString(),
               effectiveFrom: new Date(),
@@ -544,6 +549,7 @@ export const productRouter = createTRPCRouter({
           // Platform prices
           if (productData.deliverooPrice && platformMap.has('Deliveroo')) {
             pricesToCreate.push({
+              id: `price_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
               productId: product.id,
               platformId: platformMap.get('Deliveroo'),
               price: productData.deliverooPrice.toString(),
@@ -553,6 +559,7 @@ export const productRouter = createTRPCRouter({
 
           if (productData.uberPrice && platformMap.has('Uber Eats')) {
             pricesToCreate.push({
+              id: `price_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
               productId: product.id,
               platformId: platformMap.get('Uber Eats'),
               price: productData.uberPrice.toString(),
@@ -562,6 +569,7 @@ export const productRouter = createTRPCRouter({
 
           if (productData.justeatPrice && platformMap.has('Just Eat')) {
             pricesToCreate.push({
+              id: `price_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
               productId: product.id,
               platformId: platformMap.get('Just Eat'),
               price: productData.justeatPrice.toString(),
