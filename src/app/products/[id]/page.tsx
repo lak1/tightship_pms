@@ -127,7 +127,7 @@ export default function ProductDetailPage() {
         description: product.description || '',
         basePrice: roundToTwoDecimals(basePrice), // Round to 2 decimal places for display
         displayPrice: roundToTwoDecimals(displayPrice), // Round to 2 decimal places for display
-        taxRateId: product.taxRateId || '',
+        taxRateId: product.tax_rates?.id || '',
         sku: product.sku || '',
         barcode: product.barcode || '',
       })
