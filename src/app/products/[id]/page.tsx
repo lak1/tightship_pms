@@ -6,7 +6,7 @@ import { useParams } from 'next/navigation'
 import { trpc } from '@/lib/trpc'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Save, Edit, History } from 'lucide-react'
+import { ArrowLeft, Save, History } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -39,7 +39,7 @@ export default function ProductDetailPage() {
   const productId = params.id as string
   const { data: session, status } = useSession()
   // const router = useRouter() // Not needed for current functionality
-  const [isEditing, setIsEditing] = useState(false)
+  // Always in edit mode - no longer need state for this
   const [selectedAllergens, setSelectedAllergens] = useState<string[]>([])
   const [selectedDietaryInfo, setSelectedDietaryInfo] = useState<string[]>([])
   const [priceEditMode, setPriceEditMode] = useState<'base' | 'display'>('base')
@@ -57,7 +57,6 @@ export default function ProductDetailPage() {
 
   const updateProductMutation = trpc.product.update.useMutation({
     onSuccess: () => {
-      setIsEditing(false)
       // Refetch the product data
       utils.product.getById.invalidate({ id: productId })
     },
@@ -246,31 +245,13 @@ export default function ProductDetailPage() {
               Product details and pricing information
             </p>
           </div>
-          <div className="flex gap-2">
-            {!isEditing ? (
-              <button
-                onClick={() => setIsEditing(true)}
-                className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
-              >
-                <Edit className="mr-2 h-4 w-4" />
-                Edit
-              </button>
-            ) : (
-              <button
-                onClick={() => setIsEditing(false)}
-                className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-            )}
-          </div>
+          {/* Always in edit mode now - no toggle needed */}
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Main Content */}
           <div className="lg:col-span-2 space-y-8">
-            {isEditing ? (
-              <form onSubmit={handleSubmit(onSubmit)} className="space-y-8">
+            <form onSubmit={handleSubmit(onSubmit)} className="space-y-8">
                 <div className="bg-white shadow rounded-lg p-6">
                   <h2 className="text-lg font-medium text-gray-900 mb-6">Edit Product</h2>
                   
@@ -525,89 +506,6 @@ export default function ProductDetailPage() {
                   </div>
                 </div>
               </form>
-            ) : (
-              <>
-                {/* Product Information */}
-                <div className="bg-white shadow rounded-lg p-6">
-                  <h2 className="text-lg font-medium text-gray-900 mb-6">Product Information</h2>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                      <dt className="text-sm font-medium text-gray-500">Name</dt>
-                      <dd className="mt-1 text-sm text-gray-900">{product.name}</dd>
-                    </div>
-                    <div>
-                      <dt className="text-sm font-medium text-gray-500">Category</dt>
-                      <dd className="mt-1 text-sm text-gray-900">
-                        {product.category?.name || 'Uncategorized'}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt className="text-sm font-medium text-gray-500">Pricing</dt>
-                      <dd className="mt-1 text-sm text-gray-900">
-                        <div>Base: £{parseFloat(product.basePrice).toFixed(2)}</div>
-                        <div className="text-gray-600">
-                          Display: £{displayPrice.toFixed(2)} 
-                          {product.tax_rates && (
-                            <span className="text-xs ml-1">
-                              (+{(product.tax_rates.rate * 100).toFixed(0)}% {product.tax_rates.name})
-                            </span>
-                          )}
-                        </div>
-                      </dd>
-                    </div>
-                    <div>
-                      <dt className="text-sm font-medium text-gray-500">SKU</dt>
-                      <dd className="mt-1 text-sm text-gray-900">{product.sku || 'Not set'}</dd>
-                    </div>
-                    <div>
-                      <dt className="text-sm font-medium text-gray-500">Barcode</dt>
-                      <dd className="mt-1 text-sm text-gray-900">{product.barcode || 'Not set'}</dd>
-                    </div>
-                  </div>
-                  {product.description && (
-                    <div className="mt-6">
-                      <dt className="text-sm font-medium text-gray-500">Description</dt>
-                      <dd className="mt-1 text-sm text-gray-900">{product.description}</dd>
-                    </div>
-                  )}
-                </div>
-
-                {/* Allergens & Dietary Info */}
-                <div className="bg-white shadow rounded-lg p-6">
-                  <h2 className="text-lg font-medium text-gray-900 mb-6">Allergens & Dietary Information</h2>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                      <dt className="text-sm font-medium text-gray-500 mb-2">Allergens</dt>
-                      {product.allergens.length > 0 ? (
-                        <div className="flex flex-wrap gap-2">
-                          {product.allergens.map(allergen => (
-                            <span key={allergen} className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
-                              {allergen}
-                            </span>
-                          ))}
-                        </div>
-                      ) : (
-                        <dd className="text-sm text-gray-900">None specified</dd>
-                      )}
-                    </div>
-                    <div>
-                      <dt className="text-sm font-medium text-gray-500 mb-2">Dietary Information</dt>
-                      {product.dietaryInfo.length > 0 ? (
-                        <div className="flex flex-wrap gap-2">
-                          {product.dietaryInfo.map(info => (
-                            <span key={info} className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                              {info}
-                            </span>
-                          ))}
-                        </div>
-                      ) : (
-                        <dd className="text-sm text-gray-900">None specified</dd>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </>
-            )}
           </div>
 
           {/* Sidebar */}
