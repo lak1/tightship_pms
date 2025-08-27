@@ -60,7 +60,7 @@ export default function ProductsPage() {
             ...product,
             restaurantName: restaurants?.[index]?.name,
             restaurantId: restaurants?.[index]?.id,
-            displayPrice: calculateDisplayPrice(product.basePrice, product.taxRate),
+            displayPrice: calculateDisplayPrice(product.basePrice, product.tax_rates),
           })
         })
       }
@@ -275,7 +275,7 @@ export default function ProductsPage() {
                               : parseFloat(product.basePrice).toFixed(2)}
                             <div className="text-xs text-gray-500">
                               {showDisplayPrice 
-                                ? product.taxRate ? `(+${(product.taxRate.rate * 100).toFixed(0)}% ${product.taxRate.name})` : '(No tax)'
+                                ? product.tax_rates ? `(+${(product.tax_rates.rate * 100).toFixed(0)}% ${product.tax_rates.name})` : '(No tax)'
                                 : `Inc: £${product.displayPrice.toFixed(2)}`}
                             </div>
                           </div>

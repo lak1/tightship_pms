@@ -51,8 +51,8 @@ export default function ProductDetailPage() {
   )
 
   const { data: taxRates } = trpc.product.getTaxRates.useQuery(
-    { restaurantId: product?.menu?.restaurantId },
-    { enabled: !!product?.menu?.restaurantId }
+    { restaurantId: product?.menus?.restaurants?.id },
+    { enabled: !!product?.menus?.restaurants?.id }
   )
 
   const updateProductMutation = trpc.product.update.useMutation({
@@ -109,7 +109,7 @@ export default function ProductDetailPage() {
     return displayPrice / (1 + rate)
   }
 
-  const displayPrice = product ? calculateDisplayPrice(product.basePrice, product.taxRate) : 0
+  const displayPrice = product ? calculateDisplayPrice(product.basePrice, product.tax_rates) : 0
 
   // Get selected tax rate
   const selectedTaxRate = taxRates?.find(t => t.id === watchedTaxRateId)
@@ -118,7 +118,7 @@ export default function ProductDetailPage() {
   useEffect(() => {
     if (product) {
       const basePrice = parseFloat(product.basePrice)
-      const displayPrice = calculateDisplayPrice(basePrice, product.taxRate)
+      const displayPrice = calculateDisplayPrice(basePrice, product.tax_rates)
       
       reset({
         name: product.name,
@@ -544,9 +544,9 @@ export default function ProductDetailPage() {
                         <div>Base: £{parseFloat(product.basePrice).toFixed(2)}</div>
                         <div className="text-gray-600">
                           Display: £{displayPrice.toFixed(2)} 
-                          {product.taxRate && (
+                          {product.tax_rates && (
                             <span className="text-xs ml-1">
-                              (+{(product.taxRate.rate * 100).toFixed(0)}% {product.taxRate.name})
+                              (+{(product.tax_rates.rate * 100).toFixed(0)}% {product.tax_rates.name})
                             </span>
                           )}
                         </div>
@@ -628,11 +628,11 @@ export default function ProductDetailPage() {
                       £{displayPrice.toFixed(2)}
                     </span>
                   </div>
-                  {product.taxRate && (
+                  {product.tax_rates && (
                     <div className="flex justify-between items-center">
                       <span className="text-xs text-gray-500">Tax Applied</span>
                       <span className="text-xs text-gray-500">
-                        {product.taxRate.name} ({(product.taxRate.rate * 100).toFixed(0)}%)
+                        {product.tax_rates.name} ({(product.tax_rates.rate * 100).toFixed(0)}%)
                       </span>
                     </div>
                   )}
