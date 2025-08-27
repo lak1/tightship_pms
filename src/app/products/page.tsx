@@ -4,7 +4,7 @@ import { useState, useMemo } from 'react'
 import { useSession } from 'next-auth/react'
 import { trpc } from '@/lib/trpc'
 import Link from 'next/link'
-import { Search, Plus, ChevronLeft, ChevronRight, Upload } from 'lucide-react'
+import { Search, Plus, ChevronLeft, ChevronRight, Upload, Edit, Check, X } from 'lucide-react'
 import DashboardLayout from '@/components/layout/dashboard-layout'
 
 export default function ProductsPage() {
@@ -14,6 +14,8 @@ export default function ProductsPage() {
   const [selectedRestaurant, setSelectedRestaurant] = useState('')
   const [currentPage, setCurrentPage] = useState(1)
   const [showDisplayPrice, setShowDisplayPrice] = useState(false)
+  const [editingProduct, setEditingProduct] = useState<string | null>(null)
+  const [editingPrice, setEditingPrice] = useState('')
   const itemsPerPage = 20
 
   // Fetch restaurants to get their menus
@@ -48,6 +50,68 @@ export default function ProductsPage() {
         ? rawRate 
         : rawRate ? Number(rawRate) : 0
     return base * (1 + rate)
+  }
+
+  // Helper function to calculate base price from display price
+  const calculateBasePrice = (displayPrice: number, taxRate?: { rate: number | string } | null) => {
+    const rawRate = taxRate?.rate
+    const rate = typeof rawRate === 'string' 
+      ? parseFloat(rawRate) 
+      : typeof rawRate === 'number' 
+        ? rawRate 
+        : rawRate ? Number(rawRate) : 0
+    return displayPrice / (1 + rate)
+  }
+
+  const utils = trpc.useUtils()
+
+  // Mutation for updating product price
+  const updateProductMutation = trpc.product.update.useMutation({
+    onSuccess: () => {
+      setEditingProduct(null)
+      setEditingPrice('')
+      // Refetch products
+      utils.product.list.invalidate()
+    },
+    onError: (error) => {
+      console.error('Error updating product price:', error)
+      alert('Failed to update product price. Please try again.')
+    }
+  })
+
+  // Start editing a product price
+  const startEditing = (product: any) => {
+    setEditingProduct(product.id)
+    const price = showDisplayPrice ? product.displayPrice : parseFloat(product.basePrice)
+    setEditingPrice(price.toFixed(2))
+  }
+
+  // Save the edited price
+  const savePrice = (product: any) => {
+    const newPrice = parseFloat(editingPrice)
+    if (isNaN(newPrice) || newPrice < 0) {
+      alert('Please enter a valid price')
+      return
+    }
+
+    const updateData: any = { id: product.id }
+    
+    if (showDisplayPrice) {
+      // User edited display price, calculate new base price
+      const newBasePrice = calculateBasePrice(newPrice, product.tax_rates)
+      updateData.basePrice = newBasePrice
+    } else {
+      // User edited base price directly
+      updateData.basePrice = newPrice
+    }
+
+    updateProductMutation.mutate(updateData)
+  }
+
+  // Cancel editing
+  const cancelEditing = () => {
+    setEditingProduct(null)
+    setEditingPrice('')
   }
 
   // Combine all products from all restaurants
@@ -269,16 +333,74 @@ export default function ProductsPage() {
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-900">
-                            £{showDisplayPrice 
-                              ? product.displayPrice.toFixed(2)
-                              : parseFloat(product.basePrice).toFixed(2)}
-                            <div className="text-xs text-gray-500">
-                              {showDisplayPrice 
-                                ? product.tax_rates ? `(+${(product.tax_rates.rate * 100).toFixed(0)}% ${product.tax_rates.name})` : '(No tax)'
-                                : `Inc: £${product.displayPrice.toFixed(2)}`}
+                          {editingProduct === product.id ? (
+                            <div className="flex items-center space-x-2">
+                              <div className="flex flex-col">
+                                <div className="flex items-center">
+                                  <span className="text-sm text-gray-600 mr-1">£</span>
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    min="0"
+                                    value={editingPrice}
+                                    onChange={(e) => setEditingPrice(e.target.value)}
+                                    className="w-20 px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') savePrice(product)
+                                      if (e.key === 'Escape') cancelEditing()
+                                    }}
+                                    autoFocus
+                                  />
+                                  <span className="text-xs text-gray-500 ml-1">
+                                    {showDisplayPrice ? 'Inc' : 'Ex'}
+                                  </span>
+                                </div>
+                                <div className="text-xs text-gray-400 mt-1">
+                                  {showDisplayPrice 
+                                    ? `Ex: £${calculateBasePrice(parseFloat(editingPrice) || 0, product.tax_rates).toFixed(2)}`
+                                    : `Inc: £${calculateDisplayPrice(parseFloat(editingPrice) || 0, product.tax_rates).toFixed(2)}`}
+                                </div>
+                              </div>
+                              <div className="flex space-x-1">
+                                <button
+                                  onClick={() => savePrice(product)}
+                                  disabled={updateProductMutation.isLoading}
+                                  className="p-1 text-green-600 hover:text-green-800 disabled:opacity-50"
+                                >
+                                  <Check className="h-4 w-4" />
+                                </button>
+                                <button
+                                  onClick={cancelEditing}
+                                  disabled={updateProductMutation.isLoading}
+                                  className="p-1 text-gray-400 hover:text-gray-600 disabled:opacity-50"
+                                >
+                                  <X className="h-4 w-4" />
+                                </button>
+                              </div>
                             </div>
-                          </div>
+                          ) : (
+                            <div 
+                              className="text-sm text-gray-900 cursor-pointer hover:bg-gray-50 p-1 rounded group"
+                              onClick={() => startEditing(product)}
+                            >
+                              <div className="flex items-center">
+                                <span className="font-medium">
+                                  £{showDisplayPrice 
+                                    ? product.displayPrice.toFixed(2)
+                                    : parseFloat(product.basePrice).toFixed(2)}
+                                </span>
+                                <span className="text-xs text-gray-500 ml-1">
+                                  {showDisplayPrice ? 'Inc' : 'Ex'}
+                                </span>
+                                <Edit className="h-3 w-3 text-gray-400 ml-2 opacity-0 group-hover:opacity-100 transition-opacity" />
+                              </div>
+                              <div className="text-xs text-gray-500">
+                                {showDisplayPrice 
+                                  ? `Ex: £${parseFloat(product.basePrice).toFixed(2)}`
+                                  : `Inc: £${product.displayPrice.toFixed(2)}`}
+                              </div>
+                            </div>
+                          )}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
