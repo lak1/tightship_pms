@@ -231,7 +231,7 @@ model products {
   images                  String[]                  @default([])
   sku                     String?                   @unique
   barcode                 String?
-  basePrice               Decimal                   @db.Decimal(10, 2)
+  basePrice               Decimal                   @db.Decimal(10, 4)
   taxRateId               String?
   priceControl            PriceControl              @default(MANUAL)
   priceFormula            String?
