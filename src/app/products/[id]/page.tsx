@@ -84,6 +84,9 @@ export default function ProductDetailPage() {
   const watchedDisplayPrice = watch('displayPrice')
   const watchedTaxRateId = watch('taxRateId')
 
+  // Helper function to round to 2 decimal places
+  const roundToTwoDecimals = (value: number) => Math.round(value * 100) / 100
+
   // Calculate display price
   const calculateDisplayPrice = (basePrice: string | number, taxRate?: { rate: number | string } | null) => {
     const base = typeof basePrice === 'string' ? parseFloat(basePrice) : basePrice
@@ -123,8 +126,8 @@ export default function ProductDetailPage() {
       reset({
         name: product.name,
         description: product.description || '',
-        basePrice: basePrice,
-        displayPrice: displayPrice,
+        basePrice: roundToTwoDecimals(basePrice), // Round to 2 decimal places for display
+        displayPrice: roundToTwoDecimals(displayPrice), // Round to 2 decimal places for display
         taxRateId: product.taxRateId || '',
         sku: product.sku || '',
         barcode: product.barcode || '',
@@ -138,10 +141,10 @@ export default function ProductDetailPage() {
   useEffect(() => {
     if (priceEditMode === 'base' && watchedBasePrice !== undefined && selectedTaxRate) {
       const newDisplayPrice = calculateDisplayPrice(watchedBasePrice, selectedTaxRate)
-      setValue('displayPrice', newDisplayPrice)
+      setValue('displayPrice', roundToTwoDecimals(newDisplayPrice)) // Round to 2 decimal places
     } else if (priceEditMode === 'display' && watchedDisplayPrice !== undefined && selectedTaxRate) {
       const newBasePrice = calculateBasePrice(watchedDisplayPrice, selectedTaxRate)
-      setValue('basePrice', newBasePrice)
+      setValue('basePrice', roundToTwoDecimals(newBasePrice)) // Round to 2 decimal places
     }
   }, [watchedBasePrice, watchedDisplayPrice, selectedTaxRate, priceEditMode, setValue])
 
@@ -153,11 +156,11 @@ export default function ProductDetailPage() {
         if (maintainPrice === 'display' && watchedDisplayPrice) {
           // Maintain display price, recalculate base
           const newBasePrice = calculateBasePrice(watchedDisplayPrice, taxRate)
-          setValue('basePrice', newBasePrice)
+          setValue('basePrice', roundToTwoDecimals(newBasePrice)) // Round to 2 decimal places
         } else if (maintainPrice === 'base' && watchedBasePrice) {
           // Maintain base price, recalculate display
           const newDisplayPrice = calculateDisplayPrice(watchedBasePrice, taxRate)
-          setValue('displayPrice', newDisplayPrice)
+          setValue('displayPrice', roundToTwoDecimals(newDisplayPrice)) // Round to 2 decimal places
         }
       }
     }
