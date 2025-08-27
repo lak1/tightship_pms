@@ -138,7 +138,9 @@ export const productRouter = createTRPCRouter({
       const product = await ctx.db.products.create({
         data: {
           ...input,
+          id: `product_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
           basePrice: input.basePrice.toString(),
+          updatedAt: new Date(),
         },
         include: {
           categories: true,
@@ -153,6 +155,7 @@ export const productRouter = createTRPCRouter({
           productId: product.id,
           price: input.basePrice.toString(),
           effectiveFrom: new Date(),
+          updatedAt: new Date(),
         },
       })
 
@@ -218,6 +221,7 @@ export const productRouter = createTRPCRouter({
             productId: id,
             price: data.basePrice.toString(),
             effectiveFrom: new Date(),
+            updatedAt: new Date(),
           },
         })
       }
@@ -278,6 +282,7 @@ export const productRouter = createTRPCRouter({
           platformId: platformId || null,
           price: price.toString(),
           effectiveFrom: effectiveDate,
+          updatedAt: new Date(),
         },
       })
 
@@ -445,9 +450,11 @@ export const productRouter = createTRPCRouter({
           if (!category) {
             category = await ctx.db.categories.create({
               data: {
+                id: `category_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
                 menuId,
                 name: categoryName,
                 displayOrder: categoryMap.size,
+                updatedAt: new Date(),
               },
             })
           }
@@ -503,6 +510,7 @@ export const productRouter = createTRPCRouter({
             : undefined
 
           const productPayload = {
+            id: `product_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
             menuId,
             categoryId,
             name: productData.name,
@@ -514,6 +522,7 @@ export const productRouter = createTRPCRouter({
             dietaryInfo: productData.dietaryInfo || [],
             isActive: productData.active !== false,
             taxRateId: productData.taxRateId || null,
+            updatedAt: new Date(),
           }
 
           let product
@@ -543,6 +552,7 @@ export const productRouter = createTRPCRouter({
               productId: product.id,
               price: productData.basePrice.toString(),
               effectiveFrom: new Date(),
+              updatedAt: new Date(),
             })
           }
 
@@ -554,6 +564,7 @@ export const productRouter = createTRPCRouter({
               platformId: platformMap.get('Deliveroo'),
               price: productData.deliverooPrice.toString(),
               effectiveFrom: new Date(),
+              updatedAt: new Date(),
             })
           }
 
@@ -564,6 +575,7 @@ export const productRouter = createTRPCRouter({
               platformId: platformMap.get('Uber Eats'),
               price: productData.uberPrice.toString(),
               effectiveFrom: new Date(),
+              updatedAt: new Date(),
             })
           }
 
@@ -574,6 +586,7 @@ export const productRouter = createTRPCRouter({
               platformId: platformMap.get('Just Eat'),
               price: productData.justeatPrice.toString(),
               effectiveFrom: new Date(),
+              updatedAt: new Date(),
             })
           }
 
