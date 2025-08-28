@@ -16,7 +16,7 @@ export default function ProductsPage() {
   const [showDisplayPrice, setShowDisplayPrice] = useState(false)
   const [editingProduct, setEditingProduct] = useState<string | null>(null)
   const [editingPrice, setEditingPrice] = useState('')
-  const itemsPerPage = 20
+  const [itemsPerPage, setItemsPerPage] = useState(20)
 
   // Fetch restaurants to get their menus
   const { data: restaurants } = trpc.restaurant.list.useQuery(
@@ -142,19 +142,23 @@ export default function ProductsPage() {
   const categories = useMemo(() => {
     const categorySet = new Set<string>()
     allProducts.forEach(product => {
-      if (product.category?.name) {
-        categorySet.add(product.category.name)
+      if (product.categories?.name) {
+        categorySet.add(product.categories.name)
       }
     })
     return Array.from(categorySet)
   }, [allProducts])
 
   // Pagination
-  const totalPages = Math.ceil(filteredProducts.length / itemsPerPage)
-  const paginatedProducts = filteredProducts.slice(
-    (currentPage - 1) * itemsPerPage,
-    currentPage * itemsPerPage
-  )
+  const totalPages = itemsPerPage === Number.MAX_SAFE_INTEGER 
+    ? 1 
+    : Math.ceil(filteredProducts.length / itemsPerPage)
+  const paginatedProducts = itemsPerPage === Number.MAX_SAFE_INTEGER
+    ? filteredProducts
+    : filteredProducts.slice(
+        (currentPage - 1) * itemsPerPage,
+        currentPage * itemsPerPage
+      )
 
   const isLoading = status === 'loading' || restaurantQueries.some(q => q.isLoading)
 
@@ -330,7 +334,7 @@ export default function ProductsPage() {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="text-sm text-gray-900">
-                            {product.category?.name || 'Uncategorized'}
+                            {product.categories?.name || 'Uncategorised'}
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
@@ -415,34 +419,61 @@ export default function ProductsPage() {
               </div>
 
               {/* Pagination */}
-              {totalPages > 1 && (
-                <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
-                  <div className="text-sm text-gray-700">
-                    Showing {(currentPage - 1) * itemsPerPage + 1} to{' '}
-                    {Math.min(currentPage * itemsPerPage, filteredProducts.length)} of{' '}
-                    {filteredProducts.length} products
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
-                      disabled={currentPage === 1}
-                      className="p-2 border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              <div className="px-6 py-4 border-t border-gray-200">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-4">
+                    <div className="text-sm text-gray-700">
+                      {itemsPerPage === Number.MAX_SAFE_INTEGER ? (
+                        `Showing all ${filteredProducts.length} products`
+                      ) : (
+                        <>
+                          Showing {filteredProducts.length === 0 ? 0 : (currentPage - 1) * itemsPerPage + 1} to{' '}
+                          {Math.min(currentPage * itemsPerPage, filteredProducts.length)} of{' '}
+                          {filteredProducts.length} products
+                        </>
+                      )}
+                    </div>
+                    
+                    {/* Items per page selector */}
+                    <select
+                      value={itemsPerPage === Number.MAX_SAFE_INTEGER ? 'all' : itemsPerPage.toString()}
+                      onChange={(e) => {
+                        const value = e.target.value === 'all' ? Number.MAX_SAFE_INTEGER : parseInt(e.target.value)
+                        setItemsPerPage(value)
+                        setCurrentPage(1) // Reset to first page when changing items per page
+                      }}
+                      className="border border-gray-300 rounded-md px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     >
-                      <ChevronLeft className="h-4 w-4" />
-                    </button>
-                    <span className="text-sm text-gray-700">
-                      Page {currentPage} of {totalPages}
-                    </span>
-                    <button
-                      onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
-                      disabled={currentPage === totalPages}
-                      className="p-2 border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      <ChevronRight className="h-4 w-4" />
-                    </button>
+                      <option value="20">20 per page</option>
+                      <option value="40">40 per page</option>
+                      <option value="100">100 per page</option>
+                      <option value="all">All items</option>
+                    </select>
                   </div>
+                  
+                  {totalPages > 1 && (
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                        disabled={currentPage === 1}
+                        className="p-2 border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                      </button>
+                      <span className="text-sm text-gray-700">
+                        Page {currentPage} of {totalPages}
+                      </span>
+                      <button
+                        onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+                        disabled={currentPage === totalPages}
+                        className="p-2 border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <ChevronRight className="h-4 w-4" />
+                      </button>
+                    </div>
+                  )}
                 </div>
-              )}
+              </div>
             </>
           ) : (
             <div className="p-8 text-center">

@@ -15,6 +15,7 @@ import DashboardLayout from '@/components/layout/dashboard-layout'
 const productSchema = z.object({
   name: z.string().min(1, 'Product name is required'),
   description: z.string().optional(),
+  categoryId: z.string().optional(),
   basePrice: z.number().min(0, 'Price must be 0 or greater'),
   displayPrice: z.number().min(0, 'Price must be 0 or greater').optional(),
   taxRateId: z.string().optional(),
@@ -44,6 +45,8 @@ export default function ProductDetailPage() {
   const [selectedDietaryInfo, setSelectedDietaryInfo] = useState<string[]>([])
   const [priceEditMode, setPriceEditMode] = useState<'base' | 'display'>('base')
   const [maintainPrice, setMaintainPrice] = useState<'base' | 'display'>('display')
+  const [showNewCategory, setShowNewCategory] = useState(false)
+  const [newCategoryName, setNewCategoryName] = useState('')
 
   const { data: product, isLoading } = trpc.product.getById.useQuery(
     { id: productId },
@@ -54,6 +57,19 @@ export default function ProductDetailPage() {
     { restaurantId: product?.menus?.restaurants?.id },
     { enabled: !!product?.menus?.restaurants?.id }
   )
+
+  const { data: categories, refetch: refetchCategories } = trpc.product.getCategories.useQuery(
+    { menuId: product?.menuId || '' },
+    { enabled: !!product?.menuId }
+  )
+
+  const createCategoryMutation = trpc.product.createCategory.useMutation({
+    onSuccess: () => {
+      refetchCategories()
+      setShowNewCategory(false)
+      setNewCategoryName('')
+    },
+  })
 
   const updateProductMutation = trpc.product.update.useMutation({
     onSuccess: () => {
@@ -122,19 +138,31 @@ export default function ProductDetailPage() {
       const basePrice = parseFloat(product.basePrice)
       const displayPrice = calculateDisplayPrice(basePrice, product.tax_rates)
       
+      // Debug logging
+      console.log('Product data:', {
+        taxRateId: product.taxRateId,
+        tax_rates: product.tax_rates,
+        tax_rates_id: product.tax_rates?.id
+      })
+      console.log('Available taxRates:', taxRates)
+      
+      const taxRateIdToUse = product.tax_rates?.id || product.taxRateId || ''
+      console.log('Setting taxRateId to:', taxRateIdToUse)
+      
       reset({
         name: product.name,
         description: product.description || '',
+        categoryId: product.categoryId || '',
         basePrice: roundToTwoDecimals(basePrice), // Round to 2 decimal places for display
         displayPrice: roundToTwoDecimals(displayPrice), // Round to 2 decimal places for display
-        taxRateId: product.tax_rates?.id || '',
+        taxRateId: taxRateIdToUse,
         sku: product.sku || '',
         barcode: product.barcode || '',
       })
       setSelectedAllergens(product.allergens)
       setSelectedDietaryInfo(product.dietaryInfo)
     }
-  }, [product, reset])
+  }, [product, reset, taxRates])
 
   // Handle price changes based on edit mode
   useEffect(() => {
@@ -170,12 +198,22 @@ export default function ProductDetailPage() {
       id: productId,
       name: data.name,
       description: data.description,
+      categoryId: data.categoryId,
       basePrice: data.basePrice,
       taxRateId: data.taxRateId,
       sku: data.sku,
       barcode: data.barcode,
       allergens: selectedAllergens,
       dietaryInfo: selectedDietaryInfo,
+    })
+  }
+
+  const handleCreateCategory = async () => {
+    if (!newCategoryName.trim() || !product?.menuId) return
+    
+    await createCategoryMutation.mutateAsync({
+      menuId: product.menuId,
+      name: newCategoryName.trim(),
     })
   }
 
@@ -268,6 +306,63 @@ export default function ProductDetailPage() {
                       />
                       {errors.name && (
                         <p className="mt-1 text-sm text-red-600">{errors.name.message}</p>
+                      )}
+                    </div>
+
+                    {/* Category */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Category
+                      </label>
+                      {!showNewCategory ? (
+                        <div className="flex gap-2">
+                          <select
+                            {...register('categoryId')}
+                            className="flex-1 border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          >
+                            <option value="">Uncategorised</option>
+                            {categories?.map(category => (
+                              <option key={category.id} value={category.id}>
+                                {category.name}
+                              </option>
+                            ))}
+                          </select>
+                          <button
+                            type="button"
+                            onClick={() => setShowNewCategory(true)}
+                            className="px-4 py-2 text-sm font-medium text-blue-600 border border-blue-600 rounded-md hover:bg-blue-50"
+                          >
+                            + New Category
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={newCategoryName}
+                            onChange={(e) => setNewCategoryName(e.target.value)}
+                            placeholder="Enter category name"
+                            className="flex-1 border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          />
+                          <button
+                            type="button"
+                            onClick={handleCreateCategory}
+                            disabled={!newCategoryName.trim() || createCategoryMutation.isLoading}
+                            className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50"
+                          >
+                            Create
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowNewCategory(false)
+                              setNewCategoryName('')
+                            }}
+                            className="px-4 py-2 text-sm font-medium text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50"
+                          >
+                            Cancel
+                          </button>
+                        </div>
                       )}
                     </div>
 
@@ -510,6 +605,35 @@ export default function ProductDetailPage() {
 
           {/* Sidebar */}
           <div className="space-y-8">
+            {/* Product Information */}
+            <div className="bg-white shadow rounded-lg p-6">
+              <h2 className="text-lg font-medium text-gray-900 mb-4">Product Information</h2>
+              <div className="space-y-3">
+                <div>
+                  <dt className="text-sm font-medium text-gray-500">Name</dt>
+                  <dd className="mt-1 text-sm text-gray-900">{product.name}</dd>
+                </div>
+                <div>
+                  <dt className="text-sm font-medium text-gray-500">Category</dt>
+                  <dd className="mt-1 text-sm text-gray-900">
+                    {product.categories?.name || 'Uncategorised'}
+                  </dd>
+                </div>
+                {product.sku && (
+                  <div>
+                    <dt className="text-sm font-medium text-gray-500">SKU</dt>
+                    <dd className="mt-1 text-sm text-gray-900">{product.sku}</dd>
+                  </div>
+                )}
+                {product.barcode && (
+                  <div>
+                    <dt className="text-sm font-medium text-gray-500">Barcode</dt>
+                    <dd className="mt-1 text-sm text-gray-900">{product.barcode}</dd>
+                  </div>
+                )}
+              </div>
+            </div>
+
             {/* Current Pricing */}
             <div className="bg-white shadow rounded-lg p-6">
               <h2 className="text-lg font-medium text-gray-900 mb-4">Current Pricing</h2>

@@ -3,7 +3,7 @@
 import { useSession } from 'next-auth/react'
 import { trpc } from '@/lib/trpc'
 import Link from 'next/link'
-import { Plus, Building2, Settings, Menu as MenuIcon, Users } from 'lucide-react'
+import { Plus, Building2, Settings, BookOpen, Users } from 'lucide-react'
 import DashboardLayout from '@/components/layout/dashboard-layout'
 
 export default function RestaurantsPage() {
@@ -84,7 +84,7 @@ export default function RestaurantsPage() {
                       className="p-2 text-gray-400 hover:text-gray-600"
                       onClick={(e) => e.stopPropagation()}
                     >
-                      <MenuIcon className="h-4 w-4" />
+                      <BookOpen className="h-4 w-4" />
                     </Link>
                   </div>
                 </div>
@@ -176,7 +176,7 @@ export default function RestaurantsPage() {
               <div className="p-5">
                 <div className="flex items-center">
                   <div className="flex-shrink-0">
-                    <MenuIcon className="h-6 w-6 text-gray-400" />
+                    <BookOpen className="h-6 w-6 text-gray-400" />
                   </div>
                   <div className="ml-5 w-0 flex-1">
                     <dl>

@@ -4,7 +4,7 @@ import { useSession } from 'next-auth/react'
 import { useParams } from 'next/navigation'
 import { trpc } from '@/lib/trpc'
 import Link from 'next/link'
-import { Plus, Menu as MenuIcon, Package, Edit, Trash2, Folder, Upload } from 'lucide-react'
+import { Plus, BookOpen, Package, Edit, Trash2, Folder, Upload } from 'lucide-react'
 import DashboardLayout from '@/components/layout/dashboard-layout'
 
 export default function RestaurantMenusPage() {
@@ -89,7 +89,7 @@ export default function RestaurantMenusPage() {
                 <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center">
-                      <MenuIcon className="h-5 w-5 text-gray-400 mr-3" />
+                      <BookOpen className="h-5 w-5 text-gray-400 mr-3" />
                       <div>
                         <h3 className="text-lg font-medium text-gray-900">{menu.name}</h3>
                         {menu.description && (
@@ -202,7 +202,7 @@ export default function RestaurantMenusPage() {
           </div>
         ) : (
           <div className="text-center py-12 bg-white rounded-lg shadow">
-            <MenuIcon className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+            <BookOpen className="mx-auto h-12 w-12 text-gray-400 mb-4" />
             <h3 className="text-lg font-medium text-gray-900 mb-2">No menus yet</h3>
             <p className="text-gray-500 mb-4">
               Create your first menu to organize your products into categories.

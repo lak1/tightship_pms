@@ -4,7 +4,7 @@ import { useSession } from 'next-auth/react'
 import { useParams } from 'next/navigation'
 import { trpc } from '@/lib/trpc'
 import Link from 'next/link'
-import { Settings, Plus, Menu as MenuIcon, BarChart, Users, Package } from 'lucide-react'
+import { Settings, Plus, BookOpen, BarChart, Users, Package } from 'lucide-react'
 import DashboardLayout from '@/components/layout/dashboard-layout'
 
 export default function RestaurantDetailPage() {
@@ -73,115 +73,48 @@ export default function RestaurantDetailPage() {
       ]}
     >
       <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
-        {/* Quick Actions */}
-        <div className="mb-8 flex flex-wrap gap-3">
-          <Link
-            href={`/restaurants/${restaurantId}/settings`}
-            className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
-          >
-            <Settings className="mr-2 h-4 w-4" />
-            Settings
-          </Link>
-          <Link
-            href={`/restaurants/${restaurantId}/menus`}
-            className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
-          >
-            <MenuIcon className="mr-2 h-4 w-4" />
-            Manage Menus
-          </Link>
-          <Link
-            href="/products/new"
-            className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700"
-          >
-            <Plus className="mr-2 h-4 w-4" />
-            Add Product
-          </Link>
-        </div>
-
-        {/* Stats Grid */}
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4 mb-8">
-          <div className="bg-white overflow-hidden shadow rounded-lg">
-            <div className="p-5">
-              <div className="flex items-center">
-                <div className="flex-shrink-0">
-                  <MenuIcon className="h-6 w-6 text-blue-400" />
-                </div>
-                <div className="ml-5 w-0 flex-1">
-                  <dl>
-                    <dt className="text-sm font-medium text-gray-500 truncate">
-                      Active Menus
-                    </dt>
-                    <dd className="text-lg font-medium text-gray-900">
-                      {restaurant.menus.length}
-                    </dd>
-                  </dl>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white overflow-hidden shadow rounded-lg">
-            <div className="p-5">
-              <div className="flex items-center">
-                <div className="flex-shrink-0">
-                  <Package className="h-6 w-6 text-green-400" />
-                </div>
-                <div className="ml-5 w-0 flex-1">
-                  <dl>
-                    <dt className="text-sm font-medium text-gray-500 truncate">
-                      Total Products
-                    </dt>
-                    <dd className="text-lg font-medium text-gray-900">
-                      {totalProducts}
-                    </dd>
-                  </dl>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white overflow-hidden shadow rounded-lg">
-            <div className="p-5">
-              <div className="flex items-center">
-                <div className="flex-shrink-0">
-                  <Users className="h-6 w-6 text-purple-400" />
-                </div>
-                <div className="ml-5 w-0 flex-1">
-                  <dl>
-                    <dt className="text-sm font-medium text-gray-500 truncate">
-                      Integrations
-                    </dt>
-                    <dd className="text-lg font-medium text-gray-900">
-                      {restaurant.integrations.length}
-                    </dd>
-                  </dl>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white overflow-hidden shadow rounded-lg">
-            <div className="p-5">
-              <div className="flex items-center">
-                <div className="flex-shrink-0">
-                  <div className="h-6 w-6 rounded-full bg-green-100 flex items-center justify-center">
-                    <div className="h-2 w-2 rounded-full bg-green-400"></div>
-                  </div>
-                </div>
-                <div className="ml-5 w-0 flex-1">
-                  <dl>
-                    <dt className="text-sm font-medium text-gray-500 truncate">
-                      Status
-                    </dt>
-                    <dd className="text-lg font-medium text-gray-900">
-                      Active
-                    </dd>
-                  </dl>
-                </div>
-              </div>
-            </div>
+        {/* Primary Actions - Prominent placement */}
+        <div className="mb-8 bg-white rounded-lg shadow p-6">
+          <h2 className="text-lg font-medium text-gray-900 mb-4">Quick Actions</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <Link
+              href={`/products?restaurant=${restaurantId}`}
+              className="flex flex-col items-center justify-center p-6 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors group"
+            >
+              <Package className="h-8 w-8 mb-2 group-hover:scale-110 transition-transform" />
+              <span className="font-medium">View Products</span>
+              <span className="text-sm text-blue-100 mt-1">{totalProducts} items</span>
+            </Link>
+            
+            <Link
+              href={`/restaurants/${restaurantId}/menus`}
+              className="flex flex-col items-center justify-center p-6 bg-white border-2 border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-all group"
+            >
+              <BookOpen className="h-8 w-8 mb-2 text-gray-600 group-hover:text-blue-600 transition-colors" />
+              <span className="font-medium text-gray-900">Manage Menus</span>
+              <span className="text-sm text-gray-500 mt-1">{restaurant.menus.length} menus</span>
+            </Link>
+            
+            <Link
+              href="/products/new"
+              className="flex flex-col items-center justify-center p-6 bg-white border-2 border-gray-200 rounded-lg hover:border-green-500 hover:bg-green-50 transition-all group"
+            >
+              <Plus className="h-8 w-8 mb-2 text-gray-600 group-hover:text-green-600 transition-colors" />
+              <span className="font-medium text-gray-900">Add Product</span>
+              <span className="text-sm text-gray-500 mt-1">Create new item</span>
+            </Link>
+            
+            <Link
+              href={`/restaurants/${restaurantId}/settings`}
+              className="flex flex-col items-center justify-center p-6 bg-white border-2 border-gray-200 rounded-lg hover:border-gray-400 hover:bg-gray-50 transition-all group"
+            >
+              <Settings className="h-8 w-8 mb-2 text-gray-600 group-hover:text-gray-700 transition-colors" />
+              <span className="font-medium text-gray-900">Settings</span>
+              <span className="text-sm text-gray-500 mt-1">Configure restaurant</span>
+            </Link>
           </div>
         </div>
+
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Main Content */}
@@ -262,7 +195,7 @@ export default function RestaurantDetailPage() {
                 </div>
               ) : (
                 <div className="text-center py-8">
-                  <MenuIcon className="mx-auto h-8 w-8 text-gray-400 mb-2" />
+                  <BookOpen className="mx-auto h-8 w-8 text-gray-400 mb-2" />
                   <p className="text-gray-500">No menus yet</p>
                   <Link
                     href={`/restaurants/${restaurantId}/menus`}
@@ -317,22 +250,10 @@ export default function RestaurantDetailPage() {
               )}
             </div>
 
-            {/* Quick Links */}
+            {/* Additional Actions */}
             <div className="bg-white shadow rounded-lg p-6">
-              <h2 className="text-lg font-medium text-gray-900 mb-4">Quick Actions</h2>
+              <h2 className="text-lg font-medium text-gray-900 mb-4">Additional Actions</h2>
               <div className="space-y-3">
-                <Link
-                  href={`/products?restaurant=${restaurantId}`}
-                  className="block p-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
-                >
-                  <div className="flex items-center">
-                    <Package className="h-5 w-5 text-gray-400 mr-3" />
-                    <div>
-                      <div className="text-sm font-medium text-gray-900">View Products</div>
-                      <div className="text-xs text-gray-500">Manage menu items</div>
-                    </div>
-                  </div>
-                </Link>
                 <Link
                   href="/sync"
                   className="block p-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
@@ -342,6 +263,18 @@ export default function RestaurantDetailPage() {
                     <div>
                       <div className="text-sm font-medium text-gray-900">Sync Prices</div>
                       <div className="text-xs text-gray-500">Update platform prices</div>
+                    </div>
+                  </div>
+                </Link>
+                <Link
+                  href={`/reports?restaurant=${restaurantId}`}
+                  className="block p-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  <div className="flex items-center">
+                    <BarChart className="h-5 w-5 text-gray-400 mr-3" />
+                    <div>
+                      <div className="text-sm font-medium text-gray-900">View Reports</div>
+                      <div className="text-xs text-gray-500">Analytics & insights</div>
                     </div>
                   </div>
                 </Link>

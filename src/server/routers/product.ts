@@ -20,6 +20,7 @@ const createProductSchema = z.object({
 
 const updateProductSchema = createProductSchema.partial().extend({
   id: z.string(),
+  categoryId: z.string().nullable().optional(),
 })
 
 export const productRouter = createTRPCRouter({
@@ -38,6 +39,78 @@ export const productRouter = createTRPCRouter({
           name: 'asc',
         },
       })
+    }),
+
+  getCategories: organizationProcedure
+    .input(z.object({
+      menuId: z.string(),
+    }))
+    .query(async ({ ctx, input }) => {
+      // Verify menu belongs to user's organization
+      const menu = await ctx.db.menus.findFirst({
+        where: {
+          id: input.menuId,
+          restaurants: {
+            organizationId: ctx.session.user.organizationId,
+          },
+        },
+        include: {
+          categories: {
+            orderBy: {
+              name: 'asc',
+            },
+          },
+        },
+      })
+
+      if (!menu) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Menu not found',
+        })
+      }
+
+      return menu.categories
+    }),
+
+  createCategory: organizationProcedure
+    .input(z.object({
+      menuId: z.string(),
+      name: z.string().min(1),
+      description: z.string().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      // Verify menu belongs to user's organization
+      const menu = await ctx.db.menus.findFirst({
+        where: {
+          id: input.menuId,
+          restaurants: {
+            organizationId: ctx.session.user.organizationId,
+          },
+        },
+      })
+
+      if (!menu) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Menu not found',
+        })
+      }
+
+      const category = await ctx.db.categories.create({
+        data: {
+          id: `category_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          menuId: input.menuId,
+          name: input.name,
+          description: input.description,
+          displayOrder: 0,
+          isActive: true,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      })
+
+      return category
     }),
 
   list: organizationProcedure
