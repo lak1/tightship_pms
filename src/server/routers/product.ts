@@ -273,6 +273,27 @@ export const productRouter = createTRPCRouter({
         },
       })
 
+      // Trigger Google sync if integration exists and price changed
+      if (data.basePrice && data.basePrice !== Number(existingProduct.basePrice)) {
+        const googleIntegration = await ctx.db.google_integrations.findFirst({
+          where: {
+            restaurants: {
+              menus: {
+                some: { id: existingProduct.menuId }
+              }
+            },
+            isActive: true,
+            autoSync: true
+          }
+        })
+
+        if (googleIntegration) {
+          // Queue sync job (in production, use a job queue)
+          const { queueGoogleMenuSync } = await import('@/lib/google/menuSync')
+          await queueGoogleMenuSync(googleIntegration.id, 'PRICE_CHANGE')
+        }
+      }
+
       // If base price changed, create new price record
       if (data.basePrice && data.basePrice !== Number(existingProduct.basePrice)) {
         // Close current base price

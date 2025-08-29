@@ -246,6 +246,7 @@ model products {
   price_history           price_history[]
   prices                  prices[]
   product_modifier_groups product_modifier_groups[]
+  google_menu_mappings    google_menu_mappings[]
   categories              categories?               @relation(fields: [categoryId], references: [id])
   menus                   menus                     @relation(fields: [menuId], references: [id], onDelete: Cascade)
   tax_rates               tax_rates?                @relation(fields: [taxRateId], references: [id])
@@ -264,11 +265,12 @@ model restaurants {
   isActive       Boolean        @default(true)
   createdAt      DateTime       @default(now())
   updatedAt      DateTime
-  integrations   integrations[]
-  menus          menus[]
-  price_rules    price_rules[]
-  organizations  organizations  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  sync_jobs      sync_jobs[]
+  integrations        integrations[]
+  menus               menus[]
+  price_rules         price_rules[]
+  organizations       organizations         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  sync_jobs           sync_jobs[]
+  google_integrations google_integrations[]
 
   @@index([organizationId], map: "idx_restaurants_organizationid")
 }
@@ -396,4 +398,106 @@ enum UserRole {
   ADMIN
   MANAGER
   STAFF
+}
+
+/// Google Business Profile integrations
+model google_integrations {
+  id                String                  @id
+  restaurantId      String
+  googleLocationId  String                  // Google My Business location ID
+  googleAccountId   String?                 // Google account ID for API calls
+  accessToken       String                  // OAuth access token (encrypted)
+  refreshToken      String                  // OAuth refresh token (encrypted)
+  tokenExpiresAt    DateTime                // When the access token expires
+  isActive          Boolean                 @default(true)
+  lastSyncAt        DateTime?               // Last successful sync timestamp
+  syncStatus        GoogleSyncStatus        @default(PENDING)
+  errorMessage      String?                 // Last error message if any
+  autoSync          Boolean                 @default(true)  // Enable automatic syncing
+  syncInterval      Int                     @default(300)   // Sync interval in seconds (5 min)
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
+  
+  // Relations
+  restaurants       restaurants             @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  syncHistory       google_sync_history[]
+  menuMappings      google_menu_mappings[]
+  
+  @@unique([restaurantId]) // One Google integration per restaurant
+  @@index([googleLocationId])
+  @@index([syncStatus])
+}
+
+/// Track Google sync history and logs
+model google_sync_history {
+  id              String              @id
+  integrationId   String
+  syncType        GoogleSyncType      @default(MENU)
+  status          SyncStatus
+  itemsSynced     Int                 @default(0)
+  totalItems      Int                 @default(0)
+  startedAt       DateTime            @default(now())
+  completedAt     DateTime?
+  errorDetails    String?
+  triggerType     SyncTriggerType     @default(MANUAL)  // What triggered this sync
+  changesDetected Json?               // Details about what changed
+  apiResponse     Json?               // Google API response for debugging
+  createdAt       DateTime            @default(now())
+  
+  // Relations
+  integration     google_integrations @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+  
+  @@index([integrationId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+/// Map TightShip products to Google menu structure
+model google_menu_mappings {
+  id                    String                @id
+  productId             String
+  integrationId         String
+  googleMenuSectionId   String?               // Maps to Google's section ID
+  displayOrder          Int                   @default(0)
+  isActive              Boolean               @default(true)
+  includeInSync         Boolean               @default(true)    // Allow exclusion of specific items
+  customName            String?               // Override product name for Google
+  customDescription     String?               // Override description for Google
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+  
+  // Relations
+  product               products              @relation(fields: [productId], references: [id], onDelete: Cascade)
+  integration           google_integrations   @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+  
+  @@unique([productId, integrationId]) // One mapping per product per integration
+  @@index([integrationId])
+  @@index([isActive])
+}
+
+/// Google-specific enums
+enum GoogleSyncStatus {
+  PENDING
+  CONNECTING
+  SYNCING
+  SUCCESS
+  ERROR
+  DISCONNECTED
+  TOKEN_EXPIRED
+}
+
+enum GoogleSyncType {
+  MENU
+  PHOTOS
+  BUSINESS_INFO
+  ALL
+}
+
+enum SyncTriggerType {
+  MANUAL          // User clicked "Sync Now"
+  PRODUCT_UPDATE  // Product was modified
+  PRICE_CHANGE    // Price was updated
+  MENU_CHANGE     // Menu structure changed
+  SCHEDULED       // Automatic scheduled sync
+  WEBHOOK         // Triggered by external webhook
 }
