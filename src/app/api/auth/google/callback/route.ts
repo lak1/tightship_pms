@@ -84,6 +84,7 @@ export async function GET(request: NextRequest) {
     let locations = []
     try {
       // Get Google My Business accounts
+      console.log('Fetching Google Business accounts with token:', tokens.access_token?.substring(0, 20) + '...')
       const accountsResponse = await fetch(
         'https://mybusinessaccountmanagement.googleapis.com/v1/accounts',
         {
@@ -92,9 +93,22 @@ export async function GET(request: NextRequest) {
           },
         }
       )
+      
+      console.log('Accounts response status:', accountsResponse.status)
 
-      if (accountsResponse.ok) {
+      if (accountsResponse.status === 429) {
+        console.log('Rate limited by Google API - cannot proceed without real data')
+        const retryAfter = accountsResponse.headers.get('Retry-After')
+        const rateLimitReset = accountsResponse.headers.get('X-RateLimit-Reset')
+        console.log('Retry-After:', retryAfter)
+        console.log('Rate limit reset:', rateLimitReset)
+        
+        return NextResponse.redirect(
+          new URL(`/restaurants/${restaurantId}?google_error=rate_limited&retry_after=${retryAfter || 'unknown'}`, request.url)
+        )
+      } else if (accountsResponse.ok) {
         const accountsData = await accountsResponse.json()
+        console.log('Accounts data:', JSON.stringify(accountsData, null, 2))
         
         // For each account, get locations
         for (const account of accountsData.accounts || []) {
@@ -126,9 +140,19 @@ export async function GET(request: NextRequest) {
             console.error(`Failed to get locations for account ${account.name}:`, locationError)
           }
         }
+      } else {
+        // Handle other HTTP errors
+        const errorText = await accountsResponse.text()
+        console.error(`Google API error ${accountsResponse.status}:`, errorText)
+        return NextResponse.redirect(
+          new URL(`/restaurants/${restaurantId}?google_error=api_error_${accountsResponse.status}`, request.url)
+        )
       }
     } catch (apiError) {
       console.error('Failed to get Google Business locations:', apiError)
+      if (apiError instanceof Error) {
+        console.error('Error details:', apiError.message)
+      }
     }
 
     // If only one location, auto-connect it

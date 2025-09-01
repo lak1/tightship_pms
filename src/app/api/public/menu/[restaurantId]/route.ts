@@ -17,11 +17,11 @@ const querySchema = z.object({
 
 export async function GET(
   request: Request,
-  { params }: { params: { restaurantId: string } }
+  { params }: { params: Promise<{ restaurantId: string }> }
 ) {
   try {
     // Validate params
-    const { restaurantId } = paramsSchema.parse(params)
+    const { restaurantId } = paramsSchema.parse(await params)
     
     // Parse query parameters
     const { searchParams } = new URL(request.url)

@@ -4,8 +4,9 @@ import { useSession } from 'next-auth/react'
 import { useParams } from 'next/navigation'
 import { trpc } from '@/lib/trpc'
 import Link from 'next/link'
-import { Settings, Plus, BookOpen, BarChart, Users, Package } from 'lucide-react'
+import { Settings, Plus, BookOpen, BarChart, Users, Package, Globe, RefreshCw, AlertCircle, CheckCircle, Clock } from 'lucide-react'
 import DashboardLayout from '@/components/layout/dashboard-layout'
+import { useState } from 'react'
 
 export default function RestaurantDetailPage() {
   const params = useParams()
@@ -115,6 +116,8 @@ export default function RestaurantDetailPage() {
           </div>
         </div>
 
+        {/* Google Business Profile Integration */}
+        <GoogleBusinessProfileSection restaurantId={restaurantId} />
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Main Content */}
@@ -284,5 +287,180 @@ export default function RestaurantDetailPage() {
         </div>
       </div>
     </DashboardLayout>
+  )
+}
+
+// Google Business Profile Integration Component
+function GoogleBusinessProfileSection({ restaurantId }: { restaurantId: string }) {
+  const [isSyncing, setIsSyncing] = useState(false)
+  
+  // Get Google integration status
+  const { 
+    data: integration, 
+    isLoading: integrationLoading,
+    refetch: refetchIntegration 
+  } = trpc.google.getIntegration.useQuery({ restaurantId })
+  
+  // Sync menu mutation
+  const syncMenu = trpc.google.syncMenu.useMutation({
+    onSuccess: () => {
+      setIsSyncing(false)
+      refetchIntegration()
+    },
+    onError: () => {
+      setIsSyncing(false)
+    }
+  })
+  
+  // Disconnect mutation  
+  const disconnect = trpc.google.disconnect.useMutation({
+    onSuccess: () => {
+      refetchIntegration()
+    }
+  })
+  
+  const handleSync = () => {
+    setIsSyncing(true)
+    syncMenu.mutate({ restaurantId })
+  }
+  
+  // Use mutation for getting auth URL
+  const getAuthUrl = trpc.google.getAuthUrl.useQuery(
+    { restaurantId },
+    { 
+      enabled: false,
+      retry: false 
+    }
+  )
+
+  const handleConnect = async () => {
+    try {
+      // Refetch to get the auth URL
+      const result = await getAuthUrl.refetch()
+      if (result.data?.authUrl) {
+        window.location.href = result.data.authUrl
+      } else {
+        console.error('No auth URL returned')
+        alert('Failed to initiate Google connection. Please try again.')
+      }
+    } catch (error) {
+      console.error('Failed to get Google auth URL:', error)
+      alert('Failed to initiate Google connection. Please try again.')
+    }
+  }
+  
+  const handleDisconnect = () => {
+    if (window.confirm('Are you sure you want to disconnect Google Business Profile? This will stop automatic menu syncing.')) {
+      disconnect.mutate({ restaurantId })
+    }
+  }
+
+  if (integrationLoading) {
+    return (
+      <div className="mb-8 bg-white rounded-lg shadow p-6">
+        <div className="flex items-center space-x-3">
+          <Globe className="h-6 w-6 text-gray-400" />
+          <h2 className="text-lg font-medium text-gray-900">Google Business Profile</h2>
+        </div>
+        <div className="mt-4 animate-pulse">
+          <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="mb-8 bg-white rounded-lg shadow p-6">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center space-x-3">
+          <Globe className="h-6 w-6 text-blue-600" />
+          <h2 className="text-lg font-medium text-gray-900">Google Business Profile</h2>
+        </div>
+        
+        {integration ? (
+          <div className="flex items-center space-x-2">
+            {integration.syncStatus === 'SUCCESS' && (
+              <CheckCircle className="h-5 w-5 text-green-500" />
+            )}
+            {integration.syncStatus === 'ERROR' && (
+              <AlertCircle className="h-5 w-5 text-red-500" />
+            )}
+            {integration.syncStatus === 'SYNCING' && (
+              <Clock className="h-5 w-5 text-yellow-500 animate-spin" />
+            )}
+            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+              integration.isActive && !integration.isTokenExpired
+                ? 'bg-green-100 text-green-800'
+                : 'bg-red-100 text-red-800'
+            }`}>
+              {integration.isActive && !integration.isTokenExpired ? 'Connected' : 'Disconnected'}
+            </span>
+          </div>
+        ) : (
+          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+            Not Connected
+          </span>
+        )}
+      </div>
+
+      <div className="mt-4">
+        {integration ? (
+          <div className="space-y-4">
+            <p className="text-sm text-gray-600">
+              Your menu is automatically synced to Google Business Profile. 
+              Last sync: {integration.lastSyncAt 
+                ? new Date(integration.lastSyncAt).toLocaleString()
+                : 'Never'
+              }
+            </p>
+            
+            {integration.errorMessage && (
+              <div className="bg-red-50 border border-red-200 rounded-md p-3">
+                <div className="flex">
+                  <AlertCircle className="h-4 w-4 text-red-400 mt-0.5 mr-2" />
+                  <div className="text-sm text-red-700">
+                    <strong>Sync Error:</strong> {integration.errorMessage}
+                  </div>
+                </div>
+              </div>
+            )}
+            
+            <div className="flex space-x-3">
+              <button
+                onClick={handleSync}
+                disabled={isSyncing || integration.syncStatus === 'SYNCING'}
+                className="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <RefreshCw className={`h-4 w-4 mr-2 ${isSyncing || integration.syncStatus === 'SYNCING' ? 'animate-spin' : ''}`} />
+                {isSyncing || integration.syncStatus === 'SYNCING' ? 'Syncing...' : 'Sync Now'}
+              </button>
+              
+              <button
+                onClick={handleDisconnect}
+                disabled={disconnect.isLoading}
+                className="inline-flex items-center px-3 py-2 border border-gray-300 text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
+              >
+                {disconnect.isLoading ? 'Disconnecting...' : 'Disconnect'}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="text-center py-6">
+            <Globe className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+            <h3 className="text-lg font-medium text-gray-900 mb-2">Connect Google Business Profile</h3>
+            <p className="text-sm text-gray-600 mb-4">
+              Automatically sync your menu to Google Business Profile so customers can see your latest offerings when they search for your restaurant.
+            </p>
+            <button
+              onClick={handleConnect}
+              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+            >
+              <Globe className="h-4 w-4 mr-2" />
+              Connect Google Account
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
   )
 }
