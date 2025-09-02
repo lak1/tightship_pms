@@ -1,11 +1,11 @@
--- Delete account for lakis10@gmail.com
+-- Delete account for YOUR_EMAIL_HERE
 -- This will delete all associated data including organization, restaurants, menus, products, etc.
 
 -- First, find the user and their organization
 SELECT u.id as user_id, u.email, u."organizationId", o.name as org_name 
 FROM users u 
 LEFT JOIN organizations o ON u."organizationId" = o.id 
-WHERE u.email = 'lakis10@gmail.com';
+WHERE u.email = 'YOUR_EMAIL_HERE';
 
 -- Then delete in this order (due to foreign key constraints):
 -- 1. Delete related data first
