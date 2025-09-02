@@ -84,7 +84,7 @@ export async function GET(request: NextRequest) {
     let locations = []
     try {
       // Get Google My Business accounts
-      console.log('Fetching Google Business accounts with token:', tokens.access_token?.substring(0, 20) + '...')
+      console.log('Fetching Google Business accounts for restaurant:', restaurantId)
       const accountsResponse = await fetch(
         'https://mybusinessaccountmanagement.googleapis.com/v1/accounts',
         {

@@ -3,6 +3,7 @@ import CredentialsProvider from 'next-auth/providers/credentials'
 import { PrismaAdapter } from '@next-auth/prisma-adapter'
 import { compare } from 'bcryptjs'
 import { db } from './db'
+import { rateLimiter, safeError } from './security'
 
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(db),
@@ -27,8 +28,20 @@ export const authOptions: NextAuthOptions = {
           type: 'password',
         },
       },
-      async authorize(credentials) {
+      async authorize(credentials, req) {
         if (!credentials?.email || !credentials?.password) {
+          return null
+        }
+
+        // Rate limiting based on IP address
+        const clientIP = req?.headers?.['x-forwarded-for'] || req?.headers?.['x-real-ip'] || 'unknown'
+        const rateLimitKey = `auth:${clientIP}:${credentials.email}`
+        
+        if (rateLimiter.isRateLimited(rateLimitKey, 5, 15 * 60 * 1000)) {
+          safeError('Rate limit exceeded for authentication attempt', { 
+            email: credentials.email, 
+            ip: clientIP 
+          })
           return null
         }
 
@@ -42,6 +55,9 @@ export const authOptions: NextAuthOptions = {
         })
 
         if (!user || !user.isActive) {
+          safeError('Authentication failed: user not found or inactive', { 
+            email: credentials.email 
+          })
           return null
         }
 
@@ -50,15 +66,37 @@ export const authOptions: NextAuthOptions = {
           // For regular users, check hashed password
           const isValidPassword = await compare(credentials.password, user.password)
           if (!isValidPassword) {
+            safeError('Authentication failed: invalid password', { 
+              email: credentials.email 
+            })
             return null
           }
-        } else if (user.email === 'demo@tightship.com') {
-          // For demo user (who might not have a password set), allow demo123
-          if (credentials.password !== 'demo123') {
+          
+          // Reset rate limit on successful authentication
+          rateLimiter.reset(rateLimitKey)
+        } else if (
+          // Only allow demo account in development with explicit configuration
+          process.env.NODE_ENV === 'development' &&
+          process.env.ENABLE_DEMO_ACCOUNT === 'true' &&
+          process.env.DEMO_ACCOUNT_EMAIL &&
+          process.env.DEMO_ACCOUNT_PASSWORD &&
+          user.email === process.env.DEMO_ACCOUNT_EMAIL
+        ) {
+          // Check demo password from environment variable
+          if (credentials.password !== process.env.DEMO_ACCOUNT_PASSWORD) {
+            safeError('Authentication failed: invalid demo password', { 
+              email: credentials.email 
+            })
             return null
           }
+          
+          // Reset rate limit on successful demo authentication
+          rateLimiter.reset(rateLimitKey)
         } else {
           // User has no password set, reject
+          safeError('Authentication failed: user has no password set', { 
+            email: credentials.email 
+          })
           return null
         }
         
