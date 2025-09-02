@@ -1,10 +1,22 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { hash } from 'bcryptjs'
 import { db } from '@/lib/db'
+import { authRateLimit, shouldRateLimit } from '@/lib/ratelimit'
+import { captureError, captureDatabaseError, ErrorCategory } from '@/lib/sentry'
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
+  let body: any
   try {
-    const { email, password, name, organizationName } = await req.json()
+    // Apply rate limiting
+    if (shouldRateLimit()) {
+      const rateLimitResult = await authRateLimit(req)
+      if (rateLimitResult) {
+        return rateLimitResult
+      }
+    }
+
+    body = await req.json()
+    const { email, password, name, organizationName } = body
 
     // Check if user already exists
     const existingUser = await db.user.findUnique({
@@ -98,6 +110,16 @@ export async function POST(req: Request) {
       },
     })
   } catch (error) {
+    // Capture error with context
+    captureError(
+      error as Error,
+      ErrorCategory.AUTH,
+      {
+        operation: 'signup',
+        email: body?.email,
+      }
+    )
+    
     console.error('Signup error:', error)
     return NextResponse.json(
       { error: 'Failed to create account' },

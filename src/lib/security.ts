@@ -63,6 +63,7 @@ export function sanitizeForLog(message: string): string {
 
 /**
  * Safe console.log that sanitizes sensitive information
+ * @deprecated Use logger.info instead
  */
 export function safeLog(message: string, ...args: any[]) {
   if (process.env.NODE_ENV === 'development') {
@@ -72,6 +73,7 @@ export function safeLog(message: string, ...args: any[]) {
 
 /**
  * Safe console.error that sanitizes sensitive information
+ * @deprecated Use logger.error instead
  */
 export function safeError(message: string, error?: any) {
   console.error(sanitizeForLog(message), error?.message || error)

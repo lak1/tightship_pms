@@ -1,6 +1,7 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { z } from 'zod'
+import { publicApiRateLimit, shouldRateLimit } from '@/lib/ratelimit'
 
 // Public API for fetching restaurant menu data
 // Can be cached at CDN level for performance
@@ -16,10 +17,18 @@ const querySchema = z.object({
 })
 
 export async function GET(
-  request: Request,
+  request: NextRequest,
   { params }: { params: Promise<{ restaurantId: string }> }
 ) {
   try {
+    // Apply rate limiting for public API
+    if (shouldRateLimit()) {
+      const rateLimitResult = await publicApiRateLimit(request)
+      if (rateLimitResult) {
+        return rateLimitResult
+      }
+    }
+
     // Validate params
     const { restaurantId } = paramsSchema.parse(await params)
     
