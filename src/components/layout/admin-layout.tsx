@@ -14,7 +14,8 @@ import {
   FileText,
   Menu,
   X,
-  ChevronLeft
+  ChevronLeft,
+  Mail
 } from 'lucide-react'
 import { useState, useEffect } from 'react'
 
@@ -29,6 +30,8 @@ const adminNavigation = [
   { name: 'Organizations', href: '/admin/organizations', icon: Building2 },
   { name: 'Users', href: '/admin/users', icon: Users },
   { name: 'Subscriptions', href: '/admin/subscriptions', icon: CreditCard },
+  { name: 'Reports', href: '/admin/reports', icon: FileText },
+  { name: 'Email Templates', href: '/admin/email-templates', icon: Mail },
   { name: 'System Logs', href: '/admin/logs', icon: FileText },
   { name: 'Settings', href: '/admin/settings', icon: Settings },
 ]

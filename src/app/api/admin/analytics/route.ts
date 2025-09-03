@@ -39,59 +39,77 @@ export async function GET(req: NextRequest) {
         startDate.setDate(now.getDate() - 30)
     }
 
-    // Get system metrics
-    const metrics = await Promise.all([
-      // Total counts
-      db.organization.count(),
-      db.user.count(),
-      db.restaurant.count(),
-      db.product.count(),
+    // Get system metrics in smaller batches to avoid connection issues
+    const basicCounts = await Promise.all([
+      db.organizations.count(),
+      db.users.count(),
+      db.restaurants.count(),
+      db.products.count()
+    ])
 
-      // Active counts
-      db.organization.count({ where: { isActive: true } }),
-      db.user.count({ where: { isActive: true } }),
-      db.subscription.count({ where: { status: 'ACTIVE' } }),
+    const activeCounts = await Promise.all([
+      db.organizations.count(),
+      db.users.count({ where: { isActive: true } }),
+      db.subscriptions.count({ where: { status: 'ACTIVE' } })
+    ])
 
-      // Recent signups
-      db.organization.count({
+    const recentSignups = await Promise.all([
+      db.organizations.count({
         where: { 
           createdAt: { gte: startDate } 
         }
       }),
-      db.user.count({
+      db.users.count({
         where: { 
           createdAt: { gte: startDate } 
         }
-      }),
+      })
+    ])
 
-      // Subscription breakdown
-      db.subscription.groupBy({
+    // Get subscription data separately with error handling
+    let subscriptionsByStatus = []
+    let activeSubscriptionsWithPlans = []
+    let usersByRole = []
+    let orgCreationHistory = []
+    let totalUsageEvents = 0
+
+    try {
+      subscriptionsByStatus = await db.subscriptions.groupBy({
         by: ['status'],
         _count: true
-      }),
+      })
+    } catch (error) {
+      logger.error('Failed to get subscription status breakdown:', error)
+    }
 
-      // Plan breakdown
-      db.subscription.findMany({
+    try {
+      activeSubscriptionsWithPlans = await db.subscriptions.findMany({
         where: { status: 'ACTIVE' },
         include: {
-          plan: {
+          subscriptionPlan: {
             select: {
               name: true,
-              type: true
+              tier: true
             }
           }
         }
-      }),
+      })
+    } catch (error) {
+      logger.error('Failed to get active subscriptions with plans:', error)
+    }
 
-      // User roles breakdown
-      db.user.groupBy({
+    try {
+      usersByRole = await db.users.groupBy({
         by: ['role'],
         _count: true,
         where: { isActive: true }
-      }),
+      })
+    } catch (error) {
+      logger.error('Failed to get users by role breakdown:', error)
+    }
 
-      // Monthly growth (organizations created per month)
-      db.organization.findMany({
+    try {
+      orgCreationHistory = await db.organizations.findMany({
         where: {
           createdAt: { gte: startDate }
         },
@@ -99,33 +117,25 @@ export async function GET(req: NextRequest) {
           createdAt: true
         },
         orderBy: { createdAt: 'asc' }
-      }),
+      })
+    } catch (error) {
+      logger.error('Failed to get organization creation history:', error)
+    }
 
-      // Usage metrics (if usage tracking table exists)
-      // This would be expanded based on actual usage tracking implementation
-      db.usageTracking?.count?.() || 0
-    ])
+    try {
+      totalUsageEvents = await db.usage_tracking.count()
+    } catch (error) {
+      logger.error('Failed to get usage tracking count:', error)
+      totalUsageEvents = 0
+    }
 
-    const [
-      totalOrgs,
-      totalUsers,
-      totalRestaurants,
-      totalProducts,
-      activeOrgs,
-      activeUsers,
-      activeSubscriptions,
-      newOrgsThisPeriod,
-      newUsersThisPeriod,
-      subscriptionsByStatus,
-      activeSubscriptionsWithPlans,
-      usersByRole,
-      orgCreationHistory,
-      totalUsageEvents
-    ] = metrics
+    const [totalOrgs, totalUsers, totalRestaurants, totalProducts] = basicCounts
+    const [activeOrgs, activeUsers, activeSubscriptions] = activeCounts
+    const [newOrgsThisPeriod, newUsersThisPeriod] = recentSignups
 
     // Process subscription plan breakdown
     const planBreakdown = activeSubscriptionsWithPlans.reduce((acc: any, sub) => {
-      const planName = sub.plan?.name || 'Unknown'
+      const planName = sub.subscriptionPlan?.name || 'Unknown'
       acc[planName] = (acc[planName] || 0) + 1
       return acc
     }, {})
@@ -137,20 +147,26 @@ export async function GET(req: NextRequest) {
       return acc
     }, {})
 
-    // Calculate growth rate
-    const previousPeriodStart = new Date(startDate)
-    const previousPeriodEnd = new Date(startDate)
-    previousPeriodEnd.setTime(startDate.getTime())
-    previousPeriodStart.setTime(startDate.getTime() - (now.getTime() - startDate.getTime()))
+    // Calculate growth rate with error handling
+    let previousPeriodOrgs = 0
+    try {
+      const previousPeriodStart = new Date(startDate)
+      const previousPeriodEnd = new Date(startDate)
+      previousPeriodEnd.setTime(startDate.getTime())
+      previousPeriodStart.setTime(startDate.getTime() - (now.getTime() - startDate.getTime()))
 
-    const previousPeriodOrgs = await db.organization.count({
-      where: {
-        createdAt: {
-          gte: previousPeriodStart,
-          lt: previousPeriodEnd
+      previousPeriodOrgs = await db.organizations.count({
+        where: {
+          createdAt: {
+            gte: previousPeriodStart,
+            lt: previousPeriodEnd
+          }
         }
-      }
-    })
+      })
+    } catch (error) {
+      logger.error('Failed to get previous period organizations count:', error)
+      previousPeriodOrgs = 0
+    }
 
     const growthRate = previousPeriodOrgs > 0 
       ? ((newOrgsThisPeriod - previousPeriodOrgs) / previousPeriodOrgs * 100).toFixed(1)

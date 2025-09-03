@@ -31,13 +31,19 @@ export async function GET(req: NextRequest) {
       ]
     }
     
-    if (status !== 'all') {
-      where.isActive = status === 'active'
+    // Organizations don't have isActive field - we'll filter by settings.suspended
+    if (status === 'active') {
+      where.OR = [
+        { settings: { path: ['suspended'], equals: false } },
+        { settings: { path: ['suspended'], equals: null } }
+      ]
+    } else if (status === 'suspended') {
+      where.settings = { path: ['suspended'], equals: true }
     }
 
     // Get organizations with user count and subscription info
     const [organizations, total] = await Promise.all([
-      db.organization.findMany({
+      db.organizations.findMany({
         where,
         skip,
         take: limit,
@@ -48,9 +54,9 @@ export async function GET(req: NextRequest) {
               restaurants: true
             }
           },
-          subscription: {
+          subscriptions: {
             include: {
-              plan: true
+              subscriptionPlan: true
             }
           },
           users: {
@@ -65,7 +71,7 @@ export async function GET(req: NextRequest) {
         },
         orderBy: { createdAt: 'desc' }
       }),
-      db.organization.count({ where })
+      db.organizations.count({ where })
     ])
 
     await AuditLogService.logSystemAction(
@@ -113,7 +119,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Check if owner exists
-    const owner = await db.user.findUnique({
+    const owner = await db.users.findUnique({
       where: { id: ownerId }
     })
 
@@ -126,13 +132,13 @@ export async function POST(req: NextRequest) {
     // Generate unique slug if not provided
     let finalSlug = slug || name.toLowerCase().replace(/[^a-z0-9]/g, '-')
     let counter = 1
-    while (await db.organization.findUnique({ where: { slug: finalSlug } })) {
+    while (await db.organizations.findUnique({ where: { slug: finalSlug } })) {
       finalSlug = `${slug || name.toLowerCase().replace(/[^a-z0-9]/g, '-')}-${counter}`
       counter++
     }
 
     // Create organization
-    const organization = await db.organization.create({
+    const organization = await db.organizations.create({
       data: {
         name,
         slug: finalSlug,
@@ -149,7 +155,7 @@ export async function POST(req: NextRequest) {
     })
 
     // Update owner's organization
-    await db.user.update({
+    await db.users.update({
       where: { id: ownerId },
       data: { 
         organizationId: organization.id,
@@ -159,12 +165,12 @@ export async function POST(req: NextRequest) {
 
     // Create subscription if plan specified
     if (planId) {
-      const plan = await db.subscriptionPlan.findUnique({
+      const plan = await db.subscription_plans.findUnique({
         where: { id: planId }
       })
 
       if (plan) {
-        await db.subscription.create({
+        await db.subscriptions.create({
           data: {
             organizationId: organization.id,
             planId: plan.id,
@@ -217,7 +223,7 @@ export async function PATCH(req: NextRequest) {
       }, { status: 400 })
     }
 
-    const organization = await db.organization.findUnique({
+    const organization = await db.organizations.findUnique({
       where: { id: organizationId }
     })
 
@@ -233,7 +239,7 @@ export async function PATCH(req: NextRequest) {
 
     switch (action) {
       case 'update':
-        updatedOrganization = await db.organization.update({
+        updatedOrganization = await db.organizations.update({
           where: { id: organizationId },
           data: {
             name: data.name || organization.name,
@@ -245,18 +251,29 @@ export async function PATCH(req: NextRequest) {
         break
 
       case 'suspend':
-        updatedOrganization = await db.organization.update({
+        // Organizations don't have isActive field in the schema, so we'll use a setting
+        updatedOrganization = await db.organizations.update({
           where: { id: organizationId },
-          data: { isActive: false }
+          data: { 
+            settings: { 
+              ...organization.settings, 
+              suspended: true 
+            } 
+          }
         })
         auditAction = AuditAction.ORGANIZATION_SUSPENDED
         auditDetails.reason = data.reason
         break
 
       case 'reactivate':
-        updatedOrganization = await db.organization.update({
+        updatedOrganization = await db.organizations.update({
           where: { id: organizationId },
-          data: { isActive: true }
+          data: { 
+            settings: { 
+              ...organization.settings, 
+              suspended: false 
+            } 
+          }
         })
         auditAction = AuditAction.ORGANIZATION_REACTIVATED
         auditDetails.reason = data.reason

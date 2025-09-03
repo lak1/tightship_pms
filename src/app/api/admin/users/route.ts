@@ -48,12 +48,12 @@ export async function GET(req: NextRequest) {
 
     // Get users with organization info
     const [users, total] = await Promise.all([
-      db.user.findMany({
+      db.users.findMany({
         where,
         skip,
         take: limit,
         include: {
-          organization: {
+          organizations: {
             select: {
               id: true,
               name: true,
@@ -63,7 +63,7 @@ export async function GET(req: NextRequest) {
         },
         orderBy: { createdAt: 'desc' }
       }),
-      db.user.count({ where })
+      db.users.count({ where })
     ])
 
     // Remove sensitive information
@@ -76,7 +76,7 @@ export async function GET(req: NextRequest) {
       emailVerified: user.emailVerified,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
-      organization: user.organization,
+      organization: user.organizations,
       organizationId: user.organizationId
     }))
 
@@ -129,7 +129,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Check if user already exists
-    const existingUser = await db.user.findUnique({
+    const existingUser = await db.users.findUnique({
       where: { email }
     })
 
@@ -141,7 +141,7 @@ export async function POST(req: NextRequest) {
 
     // Validate organization if provided
     if (organizationId) {
-      const organization = await db.organization.findUnique({
+      const organization = await db.organizations.findUnique({
         where: { id: organizationId }
       })
 
@@ -156,7 +156,7 @@ export async function POST(req: NextRequest) {
     const hashedPassword = await hash(password, 12)
 
     // Create user
-    const user = await db.user.create({
+    const user = await db.users.create({
       data: {
         name,
         email,
@@ -166,7 +166,7 @@ export async function POST(req: NextRequest) {
         isActive: true
       },
       include: {
-        organization: {
+        organizations: {
           select: {
             id: true,
             name: true,
@@ -185,7 +185,7 @@ export async function POST(req: NextRequest) {
       isActive: user.isActive,
       emailVerified: user.emailVerified,
       createdAt: user.createdAt,
-      organization: user.organization,
+      organization: user.organizations,
       organizationId: user.organizationId
     }
 
@@ -230,10 +230,10 @@ export async function PATCH(req: NextRequest) {
       }, { status: 400 })
     }
 
-    const user = await db.user.findUnique({
+    const user = await db.users.findUnique({
       where: { id: userId },
       include: {
-        organization: {
+        organizations: {
           select: {
             id: true,
             name: true,
@@ -267,11 +267,11 @@ export async function PATCH(req: NextRequest) {
           updateData.organizationId = data.organizationId || null
         }
 
-        updatedUser = await db.user.update({
+        updatedUser = await db.users.update({
           where: { id: userId },
           data: updateData,
           include: {
-            organization: {
+            organizations: {
               select: {
                 id: true,
                 name: true,
@@ -288,11 +288,11 @@ export async function PATCH(req: NextRequest) {
         break
 
       case 'activate':
-        updatedUser = await db.user.update({
+        updatedUser = await db.users.update({
           where: { id: userId },
           data: { isActive: true },
           include: {
-            organization: {
+            organizations: {
               select: {
                 id: true,
                 name: true,
@@ -306,11 +306,11 @@ export async function PATCH(req: NextRequest) {
         break
 
       case 'deactivate':
-        updatedUser = await db.user.update({
+        updatedUser = await db.users.update({
           where: { id: userId },
           data: { isActive: false },
           include: {
-            organization: {
+            organizations: {
               select: {
                 id: true,
                 name: true,
@@ -331,11 +331,11 @@ export async function PATCH(req: NextRequest) {
         }
 
         const hashedPassword = await hash(data.newPassword, 12)
-        updatedUser = await db.user.update({
+        updatedUser = await db.users.update({
           where: { id: userId },
           data: { password: hashedPassword },
           include: {
-            organization: {
+            organizations: {
               select: {
                 id: true,
                 name: true,
@@ -364,7 +364,7 @@ export async function PATCH(req: NextRequest) {
       emailVerified: updatedUser.emailVerified,
       createdAt: updatedUser.createdAt,
       updatedAt: updatedUser.updatedAt,
-      organization: updatedUser.organization,
+      organization: updatedUser.organizations,
       organizationId: updatedUser.organizationId
     }
 
@@ -404,7 +404,7 @@ export async function DELETE(req: NextRequest) {
       }, { status: 400 })
     }
 
-    const user = await db.user.findUnique({
+    const user = await db.users.findUnique({
       where: { id: userId }
     })
 
@@ -421,7 +421,7 @@ export async function DELETE(req: NextRequest) {
       }, { status: 403 })
     }
 
-    await db.user.delete({
+    await db.users.delete({
       where: { id: userId }
     })
 

@@ -22,22 +22,21 @@ import {
 
 interface Subscription {
   id: string
-  status: 'ACTIVE' | 'CANCELLED' | 'EXPIRED' | 'PAST_DUE'
+  status: 'ACTIVE' | 'CANCELLED' | 'INCOMPLETE' | 'PAST_DUE' | 'TRIALING'
   currentPeriodStart: string
   currentPeriodEnd: string
   cancelledAt?: string
   createdAt: string
-  organization: {
+  organizations: {
     id: string
     name: string
     slug: string
-    isActive: boolean
   }
-  plan: {
+  subscriptionPlan: {
     id: string
     name: string
-    type: string
-    price: number
+    tier: string
+    priceMonthly: number
     features: any
   }
 }
@@ -47,7 +46,7 @@ interface SubscriptionsResponse {
   summary: {
     active: number
     cancelled: number
-    expired: number
+    incomplete: number
     pastDue: number
     total: number
     mrr: number
@@ -140,8 +139,10 @@ export default function SubscriptionsPage() {
         return <CheckCircle className="h-5 w-5 text-green-500" />
       case 'CANCELLED':
         return <XCircle className="h-5 w-5 text-red-500" />
-      case 'EXPIRED':
+      case 'INCOMPLETE':
         return <Clock className="h-5 w-5 text-gray-500" />
+      case 'TRIALING':
+        return <TrendingUp className="h-5 w-5 text-blue-500" />
       case 'PAST_DUE':
         return <AlertTriangle className="h-5 w-5 text-yellow-500" />
       default:
@@ -153,10 +154,11 @@ export default function SubscriptionsPage() {
     const colorMap = {
       ACTIVE: 'bg-green-100 text-green-800',
       CANCELLED: 'bg-red-100 text-red-800',
-      EXPIRED: 'bg-gray-100 text-gray-800',
+      INCOMPLETE: 'bg-gray-100 text-gray-800',
+      TRIALING: 'bg-blue-100 text-blue-800',
       PAST_DUE: 'bg-yellow-100 text-yellow-800'
     }
-    return colorMap[status] || colorMap.EXPIRED
+    return colorMap[status] || colorMap.INCOMPLETE
   }
 
   const getPlanTypeColor = (type: string) => {
@@ -217,7 +219,7 @@ export default function SubscriptionsPage() {
 
         {/* Summary Cards */}
         {summary && (
-          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-5 mb-6">
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-6 mb-6">
             <div className="bg-white overflow-hidden shadow rounded-lg">
               <div className="p-5">
                 <div className="flex items-center">
@@ -244,6 +246,22 @@ export default function SubscriptionsPage() {
                     <dl>
                       <dt className="text-sm font-medium text-gray-500 truncate">Cancelled</dt>
                       <dd className="text-lg font-medium text-gray-900">{summary.cancelled}</dd>
+                    </dl>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white overflow-hidden shadow rounded-lg">
+              <div className="p-5">
+                <div className="flex items-center">
+                  <div className="flex-shrink-0">
+                    <Clock className="h-6 w-6 text-gray-400" />
+                  </div>
+                  <div className="ml-5 w-0 flex-1">
+                    <dl>
+                      <dt className="text-sm font-medium text-gray-500 truncate">Incomplete</dt>
+                      <dd className="text-lg font-medium text-gray-900">{summary.incomplete}</dd>
                     </dl>
                   </div>
                 </div>
@@ -328,7 +346,8 @@ export default function SubscriptionsPage() {
                 <option value="all">All Status</option>
                 <option value="ACTIVE">Active</option>
                 <option value="CANCELLED">Cancelled</option>
-                <option value="EXPIRED">Expired</option>
+                <option value="INCOMPLETE">Incomplete</option>
+                <option value="TRIALING">Trialing</option>
                 <option value="PAST_DUE">Past Due</option>
               </select>
             </div>
@@ -399,19 +418,19 @@ export default function SubscriptionsPage() {
                         <div className="ml-4 min-w-0 flex-1">
                           <div className="flex items-center space-x-3">
                             <p className="text-sm font-medium text-gray-900 truncate">
-                              {subscription.organization.name}
+                              {subscription.organizations?.name}
                             </p>
                             <span className={`px-2 py-1 text-xs rounded ${getStatusColor(subscription.status)}`}>
                               {subscription.status}
                             </span>
-                            <span className={`px-2 py-1 text-xs rounded ${getPlanTypeColor(subscription.plan.type)}`}>
-                              {subscription.plan.name}
+                            <span className={`px-2 py-1 text-xs rounded ${getPlanTypeColor(subscription.subscriptionPlan?.tier)}`}>
+                              {subscription.subscriptionPlan?.name}
                             </span>
                           </div>
                           <div className="flex items-center mt-1 space-x-4">
                             <div className="flex items-center space-x-1 text-xs text-gray-500">
                               <DollarSign className="h-3 w-3" />
-                              <span>{formatCurrency(subscription.plan.price)}/month</span>
+                              <span>{formatCurrency(subscription.subscriptionPlan?.priceMonthly || 0)}/month</span>
                             </div>
                             <div className="flex items-center space-x-1 text-xs text-gray-500">
                               <Calendar className="h-3 w-3" />
@@ -428,10 +447,7 @@ export default function SubscriptionsPage() {
                           </div>
                           <div className="flex items-center mt-1 space-x-1 text-xs text-gray-500">
                             <Building2 className="h-3 w-3" />
-                            <span>Org: {subscription.organization.slug}</span>
-                            <span className={`ml-2 inline-block w-2 h-2 rounded-full ${
-                              subscription.organization.isActive ? 'bg-green-400' : 'bg-red-400'
-                            }`} />
+                            <span>Org: {subscription.organizations?.slug}</span>
                           </div>
                           <p className="text-xs text-gray-400 mt-1">
                             Created: {formatDate(subscription.createdAt)}

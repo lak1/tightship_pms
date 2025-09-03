@@ -1,23 +1,52 @@
 'use client'
 
 import { useSession } from 'next-auth/react'
-import { trpc } from '@/lib/trpc'
+import { useRouter } from 'next/navigation'
+import { useEffect, useState } from 'react'
+import DashboardLayout from '@/components/layout/dashboard-layout'
 import Link from 'next/link'
+import { 
+  Building2, 
+  Package, 
+  TrendingUp, 
+  RefreshCw,
+  Plus,
+  BarChart3,
+  Users,
+  AlertTriangle,
+  CheckCircle,
+  Clock,
+  CreditCard,
+  Zap
+} from 'lucide-react'
+import { trpc } from '@/lib/trpc'
 
 export default function Home() {
   const { data: session, status } = useSession()
-  const { data: restaurants, isLoading } = trpc.restaurant.list.useQuery(
-    undefined,
-    {
-      enabled: !!session, // Only fetch if authenticated
+  const router = useRouter()
+  
+  // Fetch real data using tRPC
+  const { data: dashboardStats, isLoading: statsLoading } = trpc.dashboard.getStats.useQuery(undefined, {
+    enabled: !!session
+  })
+  const { data: recentActivity, isLoading: activityLoading } = trpc.dashboard.getRecentActivity.useQuery(undefined, {
+    enabled: !!session
+  })
+
+  useEffect(() => {
+    if (status === 'loading') return
+    
+    if (!session) {
+      router.push('/auth/signin')
+      return
     }
-  )
+  }, [session, status, router])
 
   // Loading state
-  if (status === 'loading') {
+  if (status === 'loading' || statsLoading || activityLoading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-lg">Loading...</div>
+        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600"></div>
       </div>
     )
   }
@@ -115,125 +144,249 @@ export default function Home() {
     )
   }
 
-  // Authenticated - show dashboard
+  const formatTimeAgo = (dateString: string) => {
+    const date = new Date(dateString)
+    const now = new Date()
+    const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000)
+    
+    if (diffInSeconds < 60) return `${diffInSeconds} seconds ago`
+    if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)} minutes ago`
+    return `${Math.floor(diffInSeconds / 3600)} hours ago`
+  }
+
+  const getActivityIcon = (type: string, status: string) => {
+    if (status === 'error') return <AlertTriangle className="h-5 w-5 text-red-500" />
+    if (status === 'success') return <CheckCircle className="h-5 w-5 text-green-500" />
+    return <Clock className="h-5 w-5 text-yellow-500" />
+  }
+
+  // Authenticated - show proper dashboard with navigation
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Navigation */}
-      <nav className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="text-xl font-semibold">Tightship PMS</div>
-            <div className="flex items-center gap-4">
-              <span className="text-gray-600">
-                {session.user?.email}
-              </span>
+    <DashboardLayout title="Dashboard">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Welcome Header */}
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-gray-900">
+            Welcome back, {session.user?.name || session.user?.email?.split('@')[0]}! 👋
+          </h1>
+          <p className="mt-2 text-gray-600">
+            Here's what's happening with your restaurants today
+          </p>
+        </div>
+
+        {/* Quick Stats */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          <Link href="/restaurants" className="bg-white rounded-lg shadow p-6 hover:shadow-lg transition-shadow cursor-pointer group">
+            <div className="flex items-center">
+              <div className="flex-shrink-0 p-3 rounded-md bg-blue-500 group-hover:bg-blue-600 transition-colors">
+                <Building2 className="h-6 w-6 text-white" />
+              </div>
+              <div className="ml-4">
+                <div className="text-2xl font-bold text-gray-900 group-hover:text-blue-600 transition-colors">{dashboardStats?.totalRestaurants || 0}</div>
+                <div className="text-sm text-gray-500">Active Restaurants</div>
+              </div>
+            </div>
+          </Link>
+
+          <Link href="/products" className="bg-white rounded-lg shadow p-6 hover:shadow-lg transition-shadow cursor-pointer group">
+            <div className="flex items-center">
+              <div className="flex-shrink-0 p-3 rounded-md bg-green-500 group-hover:bg-green-600 transition-colors">
+                <Package className="h-6 w-6 text-white" />
+              </div>
+              <div className="ml-4">
+                <div className="text-2xl font-bold text-gray-900 group-hover:text-green-600 transition-colors">{dashboardStats?.totalProducts || 0}</div>
+                <div className="text-sm text-gray-500">Total Products</div>
+              </div>
+            </div>
+          </Link>
+
+          <Link href="/restaurants" className="bg-white rounded-lg shadow p-6 hover:shadow-lg transition-shadow cursor-pointer group">
+            <div className="flex items-center">
+              <div className="flex-shrink-0 p-3 rounded-md bg-purple-500 group-hover:bg-purple-600 transition-colors">
+                <BarChart3 className="h-6 w-6 text-white" />
+              </div>
+              <div className="ml-4">
+                <div className="text-2xl font-bold text-gray-900 group-hover:text-purple-600 transition-colors">{dashboardStats?.totalMenus || 0}</div>
+                <div className="text-sm text-gray-500">Active Menus</div>
+              </div>
+            </div>
+          </Link>
+
+          <Link href="/analytics" className="bg-white rounded-lg shadow p-6 hover:shadow-lg transition-shadow cursor-pointer group">
+            <div className="flex items-center">
+              <div className="flex-shrink-0 p-3 rounded-md bg-orange-500 group-hover:bg-orange-600 transition-colors">
+                <Package className="h-6 w-6 text-white" />
+              </div>
+              <div className="ml-4">
+                <div className="text-2xl font-bold text-gray-900 group-hover:text-orange-600 transition-colors">{dashboardStats?.totalCategories || 0}</div>
+                <div className="text-sm text-gray-500">Menu Categories</div>
+              </div>
+            </div>
+          </Link>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* Quick Actions */}
+          <div className="lg:col-span-2">
+            <div className="bg-white rounded-lg shadow">
+              <div className="px-6 py-4 border-b border-gray-200">
+                <h2 className="text-lg font-medium text-gray-900">Quick Actions</h2>
+              </div>
+              <div className="p-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <Link 
+                    href="/restaurants/new" 
+                    className="flex items-center p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-blue-400 hover:bg-blue-50 transition group"
+                  >
+                    <div className="flex items-center justify-center w-12 h-12 bg-blue-100 rounded-md group-hover:bg-blue-200 transition">
+                      <Building2 className="h-6 w-6 text-blue-600" />
+                    </div>
+                    <div className="ml-4">
+                      <div className="text-sm font-medium text-gray-900">Add Restaurant</div>
+                      <div className="text-xs text-gray-500">Create a new location</div>
+                    </div>
+                  </Link>
+
+                  <Link 
+                    href="/products/new" 
+                    className="flex items-center p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-green-400 hover:bg-green-50 transition group"
+                  >
+                    <div className="flex items-center justify-center w-12 h-12 bg-green-100 rounded-md group-hover:bg-green-200 transition">
+                      <Package className="h-6 w-6 text-green-600" />
+                    </div>
+                    <div className="ml-4">
+                      <div className="text-sm font-medium text-gray-900">Add Product</div>
+                      <div className="text-xs text-gray-500">Create new menu item</div>
+                    </div>
+                  </Link>
+
+                  <Link 
+                    href="/sync" 
+                    className="flex items-center p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-purple-400 hover:bg-purple-50 transition group"
+                  >
+                    <div className="flex items-center justify-center w-12 h-12 bg-purple-100 rounded-md group-hover:bg-purple-200 transition">
+                      <Zap className="h-6 w-6 text-purple-600" />
+                    </div>
+                    <div className="ml-4">
+                      <div className="text-sm font-medium text-gray-900">Sync Prices</div>
+                      <div className="text-xs text-gray-500">Update all platforms</div>
+                    </div>
+                  </Link>
+
+                  <Link 
+                    href="/analytics" 
+                    className="flex items-center p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-orange-400 hover:bg-orange-50 transition group"
+                  >
+                    <div className="flex items-center justify-center w-12 h-12 bg-orange-100 rounded-md group-hover:bg-orange-200 transition">
+                      <BarChart3 className="h-6 w-6 text-orange-600" />
+                    </div>
+                    <div className="ml-4">
+                      <div className="text-sm font-medium text-gray-900">View Analytics</div>
+                      <div className="text-xs text-gray-500">Performance insights</div>
+                    </div>
+                  </Link>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Recent Activity */}
+          <div className="lg:col-span-1">
+            <div className="bg-white rounded-lg shadow">
+              <div className="px-6 py-4 border-b border-gray-200">
+                <h2 className="text-lg font-medium text-gray-900">Recent Activity</h2>
+              </div>
+              <div className="p-6">
+                <div className="space-y-4">
+                  {recentActivity && recentActivity.length > 0 ? (
+                    recentActivity.map((activity) => (
+                      <div key={activity.id} className="flex items-start space-x-3">
+                        <div className="flex-shrink-0 mt-0.5">
+                          {getActivityIcon(activity.type, activity.status)}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm text-gray-900">{activity.message}</p>
+                          <p className="text-xs text-gray-500">{activity.time}</p>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="text-center py-4">
+                      <p className="text-sm text-gray-500">No recent activity</p>
+                    </div>
+                  )}
+                </div>
+                <div className="mt-6">
+                  <Link 
+                    href="/analytics" 
+                    className="text-sm text-blue-600 hover:text-blue-500 font-medium"
+                  >
+                    View all activity →
+                  </Link>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* System Status */}
+        <div className="mt-8 bg-white rounded-lg shadow">
+          <div className="px-6 py-4 border-b border-gray-200">
+            <h2 className="text-lg font-medium text-gray-900">System Status</h2>
+          </div>
+          <div className="p-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <div className="flex items-center space-x-2">
+                  <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
+                  <span className="text-sm font-medium text-gray-900">All systems operational</span>
+                </div>
+                <span className="text-xs text-gray-500">
+                  Last sync: {dashboardStats?.lastSync ? formatTimeAgo(dashboardStats.lastSync.toString()) : 'Never'}
+                </span>
+              </div>
               <Link
-                href="/api/auth/signout"
-                className="text-red-600 hover:text-red-700"
+                href="/sync"
+                className="inline-flex items-center px-3 py-1 border border-transparent text-xs font-medium rounded text-blue-700 bg-blue-100 hover:bg-blue-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
               >
-                Sign Out
+                <RefreshCw className="h-3 w-3 mr-1" />
+                Sync Now
               </Link>
             </div>
           </div>
         </div>
-      </nav>
 
-      {/* Dashboard Content */}
-      <div className="max-w-7xl mx-auto py-12 px-4 sm:px-6 lg:px-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-8">
-          Dashboard
-        </h1>
-
-        <div className="mt-8">
-          <h2 className="text-2xl font-semibold text-gray-900 mb-6">
-            Your Restaurants
-          </h2>
-          
-          {isLoading ? (
-            <div className="text-gray-500">Loading restaurants...</div>
-          ) : restaurants && restaurants.length > 0 ? (
-            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-              {restaurants.map((restaurant) => (
-                <Link
-                  key={restaurant.id}
-                  href={`/restaurants/${restaurant.id}`}
-                  className="bg-white overflow-hidden shadow rounded-lg hover:shadow-md transition cursor-pointer"
-                >
-                  <div className="p-6">
-                    <h3 className="text-lg font-medium text-gray-900">
-                      {restaurant.name}
-                    </h3>
-                    <p className="mt-2 text-sm text-gray-500">
-                      {restaurant.menus.length} menu(s) • {restaurant.integrations.length} integration(s)
-                    </p>
-                    <div className="mt-4">
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                        Active
-                      </span>
-                    </div>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          ) : (
-            <div className="text-center py-12 bg-white rounded-lg shadow">
-              <div className="text-gray-500">
-                <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                </svg>
-                <h3 className="mt-2 text-lg font-medium text-gray-900">No restaurants yet</h3>
-                <p className="mt-1 text-gray-500">
-                  Get started by creating your first restaurant.
-                </p>
+        {/* Getting Started Tips */}
+        <div className="mt-8 bg-blue-50 rounded-lg p-6">
+          <div className="flex items-start space-x-3">
+            <div className="flex-shrink-0">
+              <div className="flex items-center justify-center w-8 h-8 bg-blue-100 rounded-md">
+                <Users className="h-5 w-5 text-blue-600" />
               </div>
-              <div className="mt-6">
+            </div>
+            <div className="min-w-0 flex-1">
+              <h3 className="text-sm font-medium text-blue-900">Getting Started</h3>
+              <div className="mt-2 text-sm text-blue-700">
+                <p>Complete your setup to get the most out of Tightship PMS:</p>
+                <ul className="mt-2 ml-4 list-disc space-y-1">
+                  <li>Add your restaurant locations</li>
+                  <li>Import your menu items</li>
+                  <li>Connect to delivery platforms</li>
+                  <li>Set up automatic pricing rules</li>
+                </ul>
+              </div>
+              <div className="mt-4">
                 <Link
                   href="/restaurants/new"
-                  className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                  className="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-blue-700 bg-blue-100 hover:bg-blue-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
                 >
-                  <svg className="mr-2 -ml-1 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                  </svg>
-                  Add Restaurant
+                  Get Started
                 </Link>
               </div>
             </div>
-          )}
-        </div>
-
-        {/* Quick Actions */}
-        <div className="mt-12 bg-white shadow rounded-lg p-6">
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">
-            Quick Actions
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <Link href="/products/new" className="p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-gray-400 transition">
-              <svg className="w-8 h-8 mx-auto text-gray-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-              </svg>
-              <span className="block text-sm font-medium text-gray-900">Add Product</span>
-            </Link>
-            <Link href="/products/import" className="p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-gray-400 transition">
-              <svg className="w-8 h-8 mx-auto text-gray-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-              </svg>
-              <span className="block text-sm font-medium text-gray-900">Import Products</span>
-            </Link>
-            <Link href="/sync" className="p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-gray-400 transition">
-              <svg className="w-8 h-8 mx-auto text-gray-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-              </svg>
-              <span className="block text-sm font-medium text-gray-900">Sync Prices</span>
-            </Link>
-            <Link href="/analytics" className="p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-gray-400 transition">
-              <svg className="w-8 h-8 mx-auto text-gray-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-              </svg>
-              <span className="block text-sm font-medium text-gray-900">View Analytics</span>
-            </Link>
           </div>
         </div>
       </div>
-    </div>
+    </DashboardLayout>
   )
 }

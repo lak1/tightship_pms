@@ -31,11 +31,11 @@ export async function GET(req: NextRequest) {
     }
 
     if (planType !== 'all') {
-      where.plan = { type: planType }
+      where.subscriptionPlan = { tier: planType }
     }
 
     if (search) {
-      where.organization = {
+      where.organizations = {
         OR: [
           { name: { contains: search, mode: 'insensitive' } },
           { slug: { contains: search, mode: 'insensitive' } }
@@ -45,53 +45,52 @@ export async function GET(req: NextRequest) {
 
     // Get subscriptions with related data
     const [subscriptions, total] = await Promise.all([
-      db.subscription.findMany({
+      db.subscriptions.findMany({
         where,
         skip,
         take: limit,
         include: {
-          organization: {
+          organizations: {
             select: {
               id: true,
               name: true,
-              slug: true,
-              isActive: true
+              slug: true
             }
           },
-          plan: {
+          subscriptionPlan: {
             select: {
               id: true,
               name: true,
-              type: true,
-              price: true,
+              tier: true,
+              priceMonthly: true,
               features: true
             }
           }
         },
         orderBy: { createdAt: 'desc' }
       }),
-      db.subscription.count({ where })
+      db.subscriptions.count({ where })
     ])
 
     // Get summary statistics
     const summary = await Promise.all([
-      db.subscription.count({ where: { status: 'ACTIVE' } }),
-      db.subscription.count({ where: { status: 'CANCELLED' } }),
-      db.subscription.count({ where: { status: 'EXPIRED' } }),
-      db.subscription.count({ where: { status: 'PAST_DUE' } }),
+      db.subscriptions.count({ where: { status: 'ACTIVE' } }),
+      db.subscriptions.count({ where: { status: 'CANCELLED' } }),
+      db.subscriptions.count({ where: { status: 'INCOMPLETE' } }),
+      db.subscriptions.count({ where: { status: 'PAST_DUE' } }),
       
       // Revenue calculation (simplified)
-      db.subscription.findMany({
+      db.subscriptions.findMany({
         where: { status: 'ACTIVE' },
-        include: { plan: { select: { price: true } } }
+        include: { subscriptionPlan: { select: { priceMonthly: true } } }
       })
     ])
 
-    const [activeCount, cancelledCount, expiredCount, pastDueCount, activeSubsWithPricing] = summary
+    const [activeCount, cancelledCount, incompleteCount, pastDueCount, activeSubsWithPricing] = summary
 
     // Calculate MRR (Monthly Recurring Revenue)
     const mrr = activeSubsWithPricing.reduce((total, sub) => {
-      return total + (sub.plan?.price || 0)
+      return total + (sub.subscriptionPlan?.priceMonthly || 0)
     }, 0)
 
     await AuditLogService.logSystemAction(
@@ -105,7 +104,7 @@ export async function GET(req: NextRequest) {
       summary: {
         active: activeCount,
         cancelled: cancelledCount,
-        expired: expiredCount,
+        incomplete: incompleteCount,
         pastDue: pastDueCount,
         total: total,
         mrr: mrr
@@ -142,11 +141,11 @@ export async function PATCH(req: NextRequest) {
       }, { status: 400 })
     }
 
-    const subscription = await db.subscription.findUnique({
+    const subscription = await db.subscriptions.findUnique({
       where: { id: subscriptionId },
       include: {
-        organization: { select: { id: true, name: true } },
-        plan: { select: { id: true, name: true, type: true } }
+        organizations: { select: { id: true, name: true } },
+        subscriptionPlan: { select: { id: true, name: true, tier: true } }
       }
     })
 
@@ -161,12 +160,12 @@ export async function PATCH(req: NextRequest) {
     let auditDetails: any = { 
       subscriptionId,
       organizationId: subscription.organizationId,
-      organizationName: subscription.organization?.name
+      organizationName: subscription.organizations?.name
     }
 
     switch (action) {
       case 'cancel':
-        updatedSubscription = await db.subscription.update({
+        updatedSubscription = await db.subscriptions.update({
           where: { id: subscriptionId },
           data: { 
             status: 'CANCELLED',
@@ -192,7 +191,7 @@ export async function PATCH(req: NextRequest) {
         const newEndDate = new Date()
         newEndDate.setMonth(newEndDate.getMonth() + 1) // Extend by 1 month
 
-        updatedSubscription = await db.subscription.update({
+        updatedSubscription = await db.subscriptions.update({
           where: { id: subscriptionId },
           data: { 
             status: 'ACTIVE',
@@ -216,7 +215,7 @@ export async function PATCH(req: NextRequest) {
           }, { status: 400 })
         }
 
-        const newPlan = await db.subscriptionPlan.findUnique({
+        const newPlan = await db.subscriptionsPlan.findUnique({
           where: { id: data.newPlanId }
         })
 
@@ -226,9 +225,9 @@ export async function PATCH(req: NextRequest) {
           }, { status: 400 })
         }
 
-        const isUpgrade = newPlan.price > (subscription.plan?.price || 0)
+        const isUpgrade = (newPlan.priceMonthly || 0) > (subscription.subscriptionPlan?.priceMonthly || 0)
 
-        updatedSubscription = await db.subscription.update({
+        updatedSubscription = await db.subscriptions.update({
           where: { id: subscriptionId },
           data: { 
             planId: data.newPlanId
@@ -240,10 +239,10 @@ export async function PATCH(req: NextRequest) {
         })
         
         auditAction = isUpgrade ? AuditAction.SUBSCRIPTION_UPGRADED : AuditAction.SUBSCRIPTION_DOWNGRADED
-        auditDetails.oldPlan = subscription.plan?.name
+        auditDetails.oldPlan = subscription.subscriptionPlan?.name
         auditDetails.newPlan = newPlan.name
-        auditDetails.oldPrice = subscription.plan?.price
-        auditDetails.newPrice = newPlan.price
+        auditDetails.oldPrice = subscription.subscriptionPlan?.priceMonthly
+        auditDetails.newPrice = newPlan.priceMonthly
         break
 
       case 'extend':
@@ -256,7 +255,7 @@ export async function PATCH(req: NextRequest) {
         const extendedEndDate = new Date(subscription.currentPeriodEnd)
         extendedEndDate.setDate(extendedEndDate.getDate() + parseInt(data.extensionDays))
 
-        updatedSubscription = await db.subscription.update({
+        updatedSubscription = await db.subscriptions.update({
           where: { id: subscriptionId },
           data: { 
             currentPeriodEnd: extendedEndDate
@@ -316,7 +315,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Check if organization exists
-    const organization = await db.organization.findUnique({
+    const organization = await db.organizations.findUnique({
       where: { id: organizationId }
     })
 
@@ -327,7 +326,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Check if plan exists
-    const plan = await db.subscriptionPlan.findUnique({
+    const plan = await db.subscriptionsPlan.findUnique({
       where: { id: planId }
     })
 
@@ -338,7 +337,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Check if organization already has an active subscription
-    const existingSubscription = await db.subscription.findFirst({
+    const existingSubscription = await db.subscriptions.findFirst({
       where: {
         organizationId,
         status: { in: ['ACTIVE', 'PAST_DUE'] }
@@ -355,7 +354,7 @@ export async function POST(req: NextRequest) {
     const endDate = new Date()
     endDate.setMonth(endDate.getMonth() + 1) // 1 month from now
 
-    const subscription = await db.subscription.create({
+    const subscription = await db.subscriptions.create({
       data: {
         organizationId,
         planId,
@@ -364,8 +363,8 @@ export async function POST(req: NextRequest) {
         currentPeriodEnd: endDate
       },
       include: {
-        organization: { select: { id: true, name: true } },
-        plan: { select: { id: true, name: true, type: true } }
+        organizations: { select: { id: true, name: true } },
+        subscriptionPlan: { select: { id: true, name: true, tier: true } }
       }
     })
 

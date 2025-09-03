@@ -45,12 +45,12 @@ export const authOptions: NextAuthOptions = {
           return null
         }
 
-        const user = await db.user.findUnique({
+        const user = await db.users.findUnique({
           where: {
             email: credentials.email,
           },
           include: {
-            organization: true,
+            organizations: true,
           },
         })
 
@@ -106,7 +106,7 @@ export const authOptions: NextAuthOptions = {
           name: user.name || '',
           role: user.role,
           organizationId: user.organizationId,
-          organization: user.organization,
+          organization: user.organizations,
         }
       },
     }),

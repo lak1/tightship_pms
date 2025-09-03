@@ -11,7 +11,9 @@ import {
   BarChart3, 
   RefreshCw, 
   Menu,
-  X
+  X,
+  Shield,
+  CreditCard
 } from 'lucide-react'
 import { useState } from 'react'
 
@@ -29,10 +31,20 @@ const navigation = [
   { name: 'Analytics', href: '/analytics', icon: BarChart3 },
 ]
 
+const getAdminNavigation = (userRole: string) => [
+  ...navigation,
+  { name: 'Billing', href: '/billing', icon: CreditCard },
+  ...(userRole === 'OWNER' || userRole === 'ADMIN' ? [
+    { name: 'Admin Panel', href: '/admin', icon: Shield }
+  ] : [])
+]
+
 export default function DashboardLayout({ children, title, breadcrumbs }: DashboardLayoutProps) {
   const { data: session } = useSession()
   const pathname = usePathname()
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  
+  const currentNavigation = getAdminNavigation(session?.user?.role || '')
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -59,7 +71,7 @@ export default function DashboardLayout({ children, title, breadcrumbs }: Dashbo
               <span className="text-xl font-semibold text-gray-900">Tightship PMS</span>
             </div>
             <nav className="mt-5 px-2 space-y-1">
-              {navigation.map((item) => {
+              {currentNavigation.map((item) => {
                 const isActive = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href))
                 return (
                   <Link
@@ -108,7 +120,7 @@ export default function DashboardLayout({ children, title, breadcrumbs }: Dashbo
               <span className="text-xl font-semibold text-gray-900">Tightship PMS</span>
             </div>
             <nav className="mt-5 flex-1 px-2 space-y-1">
-              {navigation.map((item) => {
+              {currentNavigation.map((item) => {
                 const isActive = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href))
                 return (
                   <Link
