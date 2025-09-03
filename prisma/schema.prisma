@@ -41,6 +41,19 @@ model VerificationToken {
   @@unique([identifier, token])
 }
 
+/// Custom verification tokens for email verification and password resets
+model verification_tokens {
+  id        String   @id
+  email     String
+  token     String   @unique
+  type      String   // 'email_verification', 'password_reset'
+  expires   DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+  
+  @@index([email, type])
+}
+
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model categories {
   id           String     @id
@@ -124,15 +137,16 @@ model modifiers {
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model organizations {
-  id            String         @id
+  id            String           @id
   name          String
-  slug          String         @unique
-  settings      Json           @default("{}")
-  createdAt     DateTime       @default(now())
+  slug          String           @unique
+  settings      Json             @default("{}")
+  createdAt     DateTime         @default(now())
   updatedAt     DateTime
   restaurants   restaurants[]
   subscriptions subscriptions?
   users         users[]
+  usageTracking usage_tracking[]
 }
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
@@ -276,17 +290,52 @@ model restaurants {
 }
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model subscription_plans {
+  id               String             @id
+  tier             SubscriptionPlan   @unique
+  name             String
+  description      String?
+  priceMonthly     Decimal?           @db.Decimal(10, 2)
+  priceYearly      Decimal?           @db.Decimal(10, 2)
+  features         Json               @default("{}")
+  limits           Json               @default("{}")  // { restaurants: 1, products: 100, apiCalls: 1000 }
+  isActive         Boolean            @default(true)
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  subscriptions    subscriptions[]
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model usage_tracking {
+  id             String        @id
+  organizationId String
+  metricType     String        // 'api_calls', 'restaurants', 'products'
+  count          Int
+  periodStart    DateTime
+  periodEnd      DateTime
+  createdAt      DateTime      @default(now())
+  organizations  organizations @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, metricType, periodStart], name: "organizationId_metricType_periodStart")
+  @@index([organizationId, metricType, periodStart])
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model subscriptions {
-  id                 String             @id
-  organizationId     String             @unique
-  plan               SubscriptionPlan   @default(STARTER)
-  status             SubscriptionStatus @default(ACTIVE)
-  currentPeriodStart DateTime
-  currentPeriodEnd   DateTime
-  cancelAtPeriodEnd  Boolean            @default(false)
-  createdAt          DateTime           @default(now())
-  updatedAt          DateTime
-  organizations      organizations      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  id                   String             @id
+  organizationId       String             @unique
+  plan                 SubscriptionPlan   @default(FREE)  // Keep old plan field temporarily
+  planId               String?            // Make optional initially
+  status               SubscriptionStatus @default(TRIALING)
+  currentPeriodStart   DateTime
+  currentPeriodEnd     DateTime
+  cancelAtPeriodEnd    Boolean            @default(false)
+  stripeSubscriptionId String?
+  stripeCustomerId     String?
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime
+  organizations        organizations      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  subscriptionPlan     subscription_plans? @relation(fields: [planId], references: [id])
 }
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
@@ -361,6 +410,7 @@ enum PriceControl {
 }
 
 enum SubscriptionPlan {
+  FREE
   STARTER
   PROFESSIONAL
   ENTERPRISE
@@ -371,6 +421,7 @@ enum SubscriptionStatus {
   CANCELLED
   PAST_DUE
   INCOMPLETE
+  TRIALING
 }
 
 enum SyncDirection {

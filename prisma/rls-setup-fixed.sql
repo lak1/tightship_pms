@@ -21,6 +21,16 @@ ALTER TABLE platform_mappings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE price_rules ENABLE ROW LEVEL SECURITY;
 ALTER TABLE sync_jobs ENABLE ROW LEVEL SECURITY;
 
+-- Enable RLS on authentication tables
+ALTER TABLE "Account" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "Session" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "VerificationToken" ENABLE ROW LEVEL SECURITY;
+
+-- Enable RLS on Google integration tables
+ALTER TABLE google_integrations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE google_sync_history ENABLE ROW LEVEL SECURITY;
+ALTER TABLE google_menu_mappings ENABLE ROW LEVEL SECURITY;
+
 -- 2. Create helper function to get current user's organization (FIXED COLUMN NAMES)
 CREATE OR REPLACE FUNCTION get_user_organization_id(user_email text)
 RETURNS text
@@ -259,7 +269,90 @@ CREATE INDEX IF NOT EXISTS idx_products_menuId ON products("menuId");
 CREATE INDEX IF NOT EXISTS idx_prices_productId ON prices("productId");
 CREATE INDEX IF NOT EXISTS idx_integrations_restaurantId ON integrations("restaurantId");
 
--- 19. Grant necessary permissions
+-- 19. Authentication tables policies
+CREATE POLICY "Users can view own accounts" ON "Account"
+  FOR SELECT
+  USING (
+    "userId" IN (
+      SELECT id FROM users 
+      WHERE email = current_setting('request.jwt.claims', true)::json->>'email'
+    )
+  );
+
+CREATE POLICY "Users can manage own accounts" ON "Account"
+  FOR ALL
+  USING (
+    "userId" IN (
+      SELECT id FROM users 
+      WHERE email = current_setting('request.jwt.claims', true)::json->>'email'
+    )
+  );
+
+CREATE POLICY "Users can view own sessions" ON "Session"
+  FOR SELECT
+  USING (
+    "userId" IN (
+      SELECT id FROM users 
+      WHERE email = current_setting('request.jwt.claims', true)::json->>'email'
+    )
+  );
+
+CREATE POLICY "Users can manage own sessions" ON "Session"
+  FOR ALL
+  USING (
+    "userId" IN (
+      SELECT id FROM users 
+      WHERE email = current_setting('request.jwt.claims', true)::json->>'email'
+    )
+  );
+
+-- VerificationToken policies (these are typically managed by the auth system)
+CREATE POLICY "Allow verification token operations" ON "VerificationToken"
+  FOR ALL
+  USING (true);
+
+-- 20. Google integration tables policies
+CREATE POLICY "Users can manage own google integrations" ON google_integrations
+  FOR ALL
+  USING (
+    "restaurantId" IN (
+      SELECT id FROM restaurants 
+      WHERE "organizationId" = get_user_organization_id(current_setting('request.jwt.claims', true)::json->>'email')
+    )
+  );
+
+CREATE POLICY "Users can view own google sync history" ON google_sync_history
+  FOR SELECT
+  USING (
+    "integrationId" IN (
+      SELECT gi.id FROM google_integrations gi
+      JOIN restaurants r ON gi."restaurantId" = r.id
+      WHERE r."organizationId" = get_user_organization_id(current_setting('request.jwt.claims', true)::json->>'email')
+    )
+  );
+
+CREATE POLICY "Users can create google sync history" ON google_sync_history
+  FOR INSERT
+  WITH CHECK (
+    "integrationId" IN (
+      SELECT gi.id FROM google_integrations gi
+      JOIN restaurants r ON gi."restaurantId" = r.id
+      WHERE r."organizationId" = get_user_organization_id(current_setting('request.jwt.claims', true)::json->>'email')
+    )
+  );
+
+CREATE POLICY "Users can manage own google menu mappings" ON google_menu_mappings
+  FOR ALL
+  USING (
+    "productId" IN (
+      SELECT p.id FROM products p
+      JOIN menus m ON p."menuId" = m.id
+      JOIN restaurants r ON m."restaurantId" = r.id
+      WHERE r."organizationId" = get_user_organization_id(current_setting('request.jwt.claims', true)::json->>'email')
+    )
+  );
+
+-- 21. Grant necessary permissions
 GRANT USAGE ON SCHEMA public TO authenticated, anon;
 GRANT ALL ON ALL TABLES IN SCHEMA public TO authenticated;
 GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO authenticated;
