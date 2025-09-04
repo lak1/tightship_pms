@@ -1,4 +1,5 @@
 import { db } from '../db'
+import { dbService } from '../db-service'
 import { logger } from '../logger'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '../auth'
@@ -96,8 +97,33 @@ export class AuditLogService {
         timestamp: auditEntry.timestamp
       })
 
-      // In a production environment, you'd store this in a dedicated audit table
-      // For now, we'll log it and store essential info
+      // Store in database audit_logs table (with fallback for missing table)
+      try {
+        await dbService.executeWithRetry(
+          (client) => client.audit_logs.create({
+            data: {
+              id: auditEntry.id,
+              action: entry.action,
+              actorId: auditEntry.actorId,
+              actorEmail: auditEntry.actorEmail,
+              actorRole: auditEntry.actorRole,
+              targetId: entry.targetId,
+              targetType: entry.targetType,
+              details: entry.details || {},
+              ipAddress: auditEntry.ipAddress,
+              userAgent: auditEntry.userAgent,
+              metadata: entry.metadata || {},
+              timestamp: auditEntry.timestamp
+            }
+          }),
+          'audit_logs.create'
+        )
+      } catch (dbError) {
+        logger.warn('Failed to store audit log in database, continuing with console logging only', {
+          error: dbError.message,
+          auditId: auditEntry.id
+        })
+      }
       
       console.log('AUDIT:', JSON.stringify(auditEntry, null, 2))
 
@@ -211,17 +237,71 @@ export class AuditLogService {
     dateTo?: Date
   }) {
     try {
-      // In production, implement proper audit log querying
-      // For now, return mock data structure
+      const { page = 1, limit = 50, userId, action, dateFrom, dateTo } = options
+      const skip = (page - 1) * limit
+
+      // Build where clause
+      const where: any = {}
       
-      const { page = 1, limit = 50 } = options
+      if (userId) {
+        where.OR = [
+          { actorId: userId },
+          { targetId: userId }
+        ]
+      }
       
+      if (action) {
+        where.action = action
+      }
+      
+      if (dateFrom || dateTo) {
+        where.timestamp = {}
+        if (dateFrom) where.timestamp.gte = dateFrom
+        if (dateTo) where.timestamp.lte = dateTo
+      }
+
+      let logs = []
+      let total = 0
+
+      try {
+        logs = await dbService.executeWithRetry(
+          (client) => client.audit_logs.findMany({
+            where,
+            skip,
+            take: limit,
+            orderBy: { timestamp: 'desc' }
+          }),
+          'audit_logs.findMany'
+        )
+        
+        total = await dbService.count('audit_logs', { where })
+      } catch (dbError) {
+        logger.warn('Failed to retrieve audit logs from database, table may not exist yet', {
+          error: dbError.message
+        })
+        // Return empty results if table doesn't exist
+        logs = []
+        total = 0
+      }
+
       return {
-        logs: [], // Would contain actual audit log entries
-        total: 0,
+        logs: logs.map(log => ({
+          id: log.id,
+          action: log.action,
+          actorId: log.actorId,
+          actorEmail: log.actorEmail,
+          actorRole: log.actorRole,
+          targetId: log.targetId,
+          targetType: log.targetType,
+          details: log.details,
+          ipAddress: log.ipAddress,
+          userAgent: log.userAgent,
+          timestamp: log.timestamp.toISOString()
+        })),
+        total,
         page,
         limit,
-        totalPages: 0
+        totalPages: Math.ceil(total / limit)
       }
 
     } catch (error) {

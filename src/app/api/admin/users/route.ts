@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { db } from '@/lib/db'
+import { dbService } from '@/lib/db-service'
 import { hash } from 'bcryptjs'
 import { AuditLogService, AuditAction } from '@/lib/services/audit-log'
 import { logger } from '@/lib/logger'
@@ -46,9 +47,9 @@ export async function GET(req: NextRequest) {
       where.organizationId = organizationId
     }
 
-    // Get users with organization info
-    const [users, total] = await Promise.all([
-      db.users.findMany({
+    // Get users with organization info (sequential for free tier)
+    const users = await dbService.executeWithRetry(
+      (client) => client.users.findMany({
         where,
         skip,
         take: limit,
@@ -63,8 +64,10 @@ export async function GET(req: NextRequest) {
         },
         orderBy: { createdAt: 'desc' }
       }),
-      db.users.count({ where })
-    ])
+      'users.findMany with organization'
+    )
+    
+    const total = await dbService.count('users', { where })
 
     // Remove sensitive information
     const sanitizedUsers = users.map(user => ({

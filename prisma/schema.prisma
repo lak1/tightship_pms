@@ -552,3 +552,47 @@ enum SyncTriggerType {
   SCHEDULED       // Automatic scheduled sync
   WEBHOOK         // Triggered by external webhook
 }
+
+enum AuditAction {
+  USER_CREATED
+  USER_UPDATED
+  USER_DELETED
+  USER_ROLE_CHANGED
+  USER_ACTIVATED
+  USER_DEACTIVATED
+  ORGANIZATION_CREATED
+  ORGANIZATION_UPDATED
+  ORGANIZATION_DELETED
+  ORGANIZATION_SUSPENDED
+  ORGANIZATION_REACTIVATED
+  SUBSCRIPTION_CREATED
+  SUBSCRIPTION_UPDATED
+  SUBSCRIPTION_CANCELLED
+  SUBSCRIPTION_UPGRADED
+  SUBSCRIPTION_DOWNGRADED
+  ADMIN_LOGIN
+  ADMIN_LOGOUT
+  SYSTEM_SETTINGS_CHANGED
+  BULK_ACTION_PERFORMED
+  PASSWORD_RESET_REQUESTED
+  ACCOUNT_LOCKED
+  ACCOUNT_UNLOCKED
+  SUSPICIOUS_ACTIVITY_DETECTED
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model audit_logs {
+  id         String      @id
+  action     AuditAction
+  actorId    String?
+  actorEmail String?
+  actorRole  String?
+  targetId   String?
+  targetType String?
+  details    Json        @default("{}")
+  ipAddress  String?
+  userAgent  String?
+  metadata   Json        @default("{}")
+  timestamp  DateTime    @default(now())
+  createdAt  DateTime    @default(now())
+}

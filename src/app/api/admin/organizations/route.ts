@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { db } from '@/lib/db'
+import { dbService } from '@/lib/db-service'
 import { AuditLogService, AuditAction } from '@/lib/services/audit-log'
 import { logger } from '@/lib/logger'
 
@@ -41,9 +42,9 @@ export async function GET(req: NextRequest) {
       where.settings = { path: ['suspended'], equals: true }
     }
 
-    // Get organizations with user count and subscription info
-    const [organizations, total] = await Promise.all([
-      db.organizations.findMany({
+    // Get organizations with user count and subscription info (sequential for free tier)
+    const organizations = await dbService.executeWithRetry(
+      (client) => client.organizations.findMany({
         where,
         skip,
         take: limit,
@@ -71,8 +72,10 @@ export async function GET(req: NextRequest) {
         },
         orderBy: { createdAt: 'desc' }
       }),
-      db.organizations.count({ where })
-    ])
+      'organizations.findMany with includes'
+    )
+    
+    const total = await dbService.count('organizations', { where })
 
     await AuditLogService.logSystemAction(
       AuditAction.BULK_ACTION_PERFORMED,
@@ -119,7 +122,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Check if owner exists
-    const owner = await db.users.findUnique({
+    const owner = await dbService.findUnique('users', {
       where: { id: ownerId }
     })
 
@@ -132,30 +135,33 @@ export async function POST(req: NextRequest) {
     // Generate unique slug if not provided
     let finalSlug = slug || name.toLowerCase().replace(/[^a-z0-9]/g, '-')
     let counter = 1
-    while (await db.organizations.findUnique({ where: { slug: finalSlug } })) {
+    while (await dbService.findUnique('organizations', { where: { slug: finalSlug } })) {
       finalSlug = `${slug || name.toLowerCase().replace(/[^a-z0-9]/g, '-')}-${counter}`
       counter++
     }
 
     // Create organization
-    const organization = await db.organizations.create({
-      data: {
-        name,
-        slug: finalSlug,
-        settings: {}
-      },
-      include: {
-        _count: {
-          select: {
-            users: true,
-            restaurants: true
+    const organization = await dbService.executeWithRetry(
+      (client) => client.organizations.create({
+        data: {
+          name,
+          slug: finalSlug,
+          settings: {}
+        },
+        include: {
+          _count: {
+            select: {
+              users: true,
+              restaurants: true
+            }
           }
         }
-      }
-    })
+      }),
+      'organizations.create with count'
+    )
 
     // Update owner's organization
-    await db.users.update({
+    await dbService.update('users', {
       where: { id: ownerId },
       data: { 
         organizationId: organization.id,
@@ -165,12 +171,12 @@ export async function POST(req: NextRequest) {
 
     // Create subscription if plan specified
     if (planId) {
-      const plan = await db.subscription_plans.findUnique({
+      const plan = await dbService.findUnique('subscription_plans', {
         where: { id: planId }
       })
 
       if (plan) {
-        await db.subscriptions.create({
+        await dbService.create('subscriptions', {
           data: {
             organizationId: organization.id,
             planId: plan.id,
@@ -223,7 +229,7 @@ export async function PATCH(req: NextRequest) {
       }, { status: 400 })
     }
 
-    const organization = await db.organizations.findUnique({
+    const organization = await dbService.findUnique('organizations', {
       where: { id: organizationId }
     })
 
@@ -239,7 +245,7 @@ export async function PATCH(req: NextRequest) {
 
     switch (action) {
       case 'update':
-        updatedOrganization = await db.organizations.update({
+        updatedOrganization = await dbService.update('organizations', {
           where: { id: organizationId },
           data: {
             name: data.name || organization.name,
@@ -252,7 +258,7 @@ export async function PATCH(req: NextRequest) {
 
       case 'suspend':
         // Organizations don't have isActive field in the schema, so we'll use a setting
-        updatedOrganization = await db.organizations.update({
+        updatedOrganization = await dbService.update('organizations', {
           where: { id: organizationId },
           data: { 
             settings: { 
@@ -266,7 +272,7 @@ export async function PATCH(req: NextRequest) {
         break
 
       case 'reactivate':
-        updatedOrganization = await db.organizations.update({
+        updatedOrganization = await dbService.update('organizations', {
           where: { id: organizationId },
           data: { 
             settings: { 

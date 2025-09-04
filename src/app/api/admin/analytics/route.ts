@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { db } from '@/lib/db'
+import { dbService } from '@/lib/db-service'
 import { AuditLogService, AuditAction } from '@/lib/services/audit-log'
 import { logger } from '@/lib/logger'
 
@@ -39,32 +40,32 @@ export async function GET(req: NextRequest) {
         startDate.setDate(now.getDate() - 30)
     }
 
-    // Get system metrics in smaller batches to avoid connection issues
-    const basicCounts = await Promise.all([
-      db.organizations.count(),
-      db.users.count(),
-      db.restaurants.count(),
-      db.products.count()
-    ])
+    // Get system metrics sequentially to avoid connection pool exhaustion on free tier
+    const totalOrgs = await dbService.count('organizations')
+    const totalUsers = await dbService.count('users')
+    const totalRestaurants = await dbService.count('restaurants')
+    const totalProducts = await dbService.count('products')
 
-    const activeCounts = await Promise.all([
-      db.organizations.count(),
-      db.users.count({ where: { isActive: true } }),
-      db.subscriptions.count({ where: { status: 'ACTIVE' } })
-    ])
+    // Active counts
+    const activeOrgs = totalOrgs // Assume all orgs are active for now
+    const activeUsers = await dbService.count('users', { where: { isActive: true } })
+    const activeSubscriptions = await dbService.count('subscriptions', { where: { status: 'ACTIVE' } })
 
-    const recentSignups = await Promise.all([
-      db.organizations.count({
-        where: { 
-          createdAt: { gte: startDate } 
-        }
-      }),
-      db.users.count({
-        where: { 
-          createdAt: { gte: startDate } 
-        }
-      })
-    ])
+    // Recent signups
+    const newOrgsThisPeriod = await dbService.count('organizations', {
+      where: { 
+        createdAt: { gte: startDate } 
+      }
+    })
+    const newUsersThisPeriod = await dbService.count('users', {
+      where: { 
+        createdAt: { gte: startDate } 
+      }
+    })
+
+    const basicCounts = [totalOrgs, totalUsers, totalRestaurants, totalProducts]
+    const activeCounts = [totalOrgs, activeUsers, activeSubscriptions] // Use totalOrgs as activeOrgs
+    const recentSignups = [newOrgsThisPeriod, newUsersThisPeriod]
 
     // Get subscription data separately with error handling
     let subscriptionsByStatus = []
@@ -74,7 +75,7 @@ export async function GET(req: NextRequest) {
     let totalUsageEvents = 0
 
     try {
-      subscriptionsByStatus = await db.subscriptions.groupBy({
+      subscriptionsByStatus = await dbService.groupBy('subscriptions', {
         by: ['status'],
         _count: true
       })
@@ -83,23 +84,26 @@ export async function GET(req: NextRequest) {
     }
 
     try {
-      activeSubscriptionsWithPlans = await db.subscriptions.findMany({
-        where: { status: 'ACTIVE' },
-        include: {
-          subscriptionPlan: {
-            select: {
-              name: true,
-              tier: true
+      activeSubscriptionsWithPlans = await dbService.executeWithRetry(
+        (client) => client.subscriptions.findMany({
+          where: { status: 'ACTIVE' },
+          include: {
+            subscriptionPlan: {
+              select: {
+                name: true,
+                tier: true
+              }
             }
           }
-        }
-      })
+        }),
+        'subscriptions.findMany with plans'
+      )
     } catch (error) {
       logger.error('Failed to get active subscriptions with plans:', error)
     }
 
     try {
-      usersByRole = await db.users.groupBy({
+      usersByRole = await dbService.groupBy('users', {
         by: ['role'],
         _count: true,
         where: { isActive: true }
@@ -109,7 +113,7 @@ export async function GET(req: NextRequest) {
     }
 
     try {
-      orgCreationHistory = await db.organizations.findMany({
+      orgCreationHistory = await dbService.findMany('organizations', {
         where: {
           createdAt: { gte: startDate }
         },
@@ -123,15 +127,15 @@ export async function GET(req: NextRequest) {
     }
 
     try {
-      totalUsageEvents = await db.usage_tracking.count()
+      totalUsageEvents = await dbService.count('usage_tracking')
     } catch (error) {
       logger.error('Failed to get usage tracking count:', error)
       totalUsageEvents = 0
     }
 
-    const [totalOrgs, totalUsers, totalRestaurants, totalProducts] = basicCounts
-    const [activeOrgs, activeUsers, activeSubscriptions] = activeCounts
-    const [newOrgsThisPeriod, newUsersThisPeriod] = recentSignups
+    const [orgsTotal, usersTotal, restaurantsTotal, productsTotal] = basicCounts
+    const [orgsActive, usersActive, subscriptionsActive] = activeCounts
+    const [orgsNewThisPeriod, usersNewThisPeriod] = recentSignups
 
     // Process subscription plan breakdown
     const planBreakdown = activeSubscriptionsWithPlans.reduce((acc: any, sub) => {
@@ -155,7 +159,7 @@ export async function GET(req: NextRequest) {
       previousPeriodEnd.setTime(startDate.getTime())
       previousPeriodStart.setTime(startDate.getTime() - (now.getTime() - startDate.getTime()))
 
-      previousPeriodOrgs = await db.organizations.count({
+      previousPeriodOrgs = await dbService.count('organizations', {
         where: {
           createdAt: {
             gte: previousPeriodStart,
@@ -169,34 +173,34 @@ export async function GET(req: NextRequest) {
     }
 
     const growthRate = previousPeriodOrgs > 0 
-      ? ((newOrgsThisPeriod - previousPeriodOrgs) / previousPeriodOrgs * 100).toFixed(1)
-      : newOrgsThisPeriod > 0 ? '100.0' : '0.0'
+      ? ((orgsNewThisPeriod - previousPeriodOrgs) / previousPeriodOrgs * 100).toFixed(1)
+      : orgsNewThisPeriod > 0 ? '100.0' : '0.0'
 
     const analytics = {
       overview: {
-        totalOrganizations: totalOrgs,
-        totalUsers: totalUsers,
-        totalRestaurants: totalRestaurants,
-        totalProducts: totalProducts,
-        activeOrganizations: activeOrgs,
-        activeUsers: activeUsers,
-        activeSubscriptions: activeSubscriptions,
-        newOrganizations: newOrgsThisPeriod,
-        newUsers: newUsersThisPeriod,
+        totalOrganizations: orgsTotal,
+        totalUsers: usersTotal,
+        totalRestaurants: restaurantsTotal,
+        totalProducts: productsTotal,
+        activeOrganizations: orgsActive,
+        activeUsers: usersActive,
+        activeSubscriptions: subscriptionsActive,
+        newOrganizations: orgsNewThisPeriod,
+        newUsers: usersNewThisPeriod,
         growthRate: `${growthRate}%`,
         totalUsageEvents: totalUsageEvents || 0
       },
       subscriptions: {
         byStatus: subscriptionsByStatus,
         byPlan: planBreakdown,
-        total: activeSubscriptions,
-        conversionRate: totalOrgs > 0 ? ((activeSubscriptions / totalOrgs) * 100).toFixed(1) + '%' : '0%'
+        total: subscriptionsActive,
+        conversionRate: orgsTotal > 0 ? ((subscriptionsActive / orgsTotal) * 100).toFixed(1) + '%' : '0%'
       },
       users: {
         byRole: usersByRole,
-        total: totalUsers,
-        active: activeUsers,
-        activeRate: totalUsers > 0 ? ((activeUsers / totalUsers) * 100).toFixed(1) + '%' : '0%'
+        total: usersTotal,
+        active: usersActive,
+        activeRate: usersTotal > 0 ? ((usersActive / usersTotal) * 100).toFixed(1) + '%' : '0%'
       },
       growth: {
         monthly: monthlyGrowth,

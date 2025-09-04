@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { db } from '@/lib/db'
+import { dbService } from '@/lib/db-service'
 import { AuditLogService, AuditAction } from '@/lib/services/audit-log'
 import { logger } from '@/lib/logger'
 
@@ -43,9 +44,9 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // Get subscriptions with related data
-    const [subscriptions, total] = await Promise.all([
-      db.subscriptions.findMany({
+    // Get subscriptions with related data (sequential for free tier)
+    const subscriptions = await dbService.executeWithRetry(
+      (client) => client.subscriptions.findMany({
         where,
         skip,
         take: limit,
@@ -69,24 +70,25 @@ export async function GET(req: NextRequest) {
         },
         orderBy: { createdAt: 'desc' }
       }),
-      db.subscriptions.count({ where })
-    ])
+      'subscriptions.findMany with related data'
+    )
+    
+    const total = await dbService.count('subscriptions', { where })
 
-    // Get summary statistics
-    const summary = await Promise.all([
-      db.subscriptions.count({ where: { status: 'ACTIVE' } }),
-      db.subscriptions.count({ where: { status: 'CANCELLED' } }),
-      db.subscriptions.count({ where: { status: 'INCOMPLETE' } }),
-      db.subscriptions.count({ where: { status: 'PAST_DUE' } }),
-      
-      // Revenue calculation (simplified)
-      db.subscriptions.findMany({
+    // Get summary statistics (sequential for free tier)
+    const activeCount = await dbService.count('subscriptions', { where: { status: 'ACTIVE' } })
+    const cancelledCount = await dbService.count('subscriptions', { where: { status: 'CANCELLED' } })
+    const incompleteCount = await dbService.count('subscriptions', { where: { status: 'INCOMPLETE' } })
+    const pastDueCount = await dbService.count('subscriptions', { where: { status: 'PAST_DUE' } })
+    
+    // Revenue calculation (simplified)
+    const activeSubsWithPricing = await dbService.executeWithRetry(
+      (client) => client.subscriptions.findMany({
         where: { status: 'ACTIVE' },
         include: { subscriptionPlan: { select: { priceMonthly: true } } }
-      })
-    ])
-
-    const [activeCount, cancelledCount, incompleteCount, pastDueCount, activeSubsWithPricing] = summary
+      }),
+      'subscriptions.findMany for pricing'
+    )
 
     // Calculate MRR (Monthly Recurring Revenue)
     const mrr = activeSubsWithPricing.reduce((total, sub) => {
@@ -141,13 +143,16 @@ export async function PATCH(req: NextRequest) {
       }, { status: 400 })
     }
 
-    const subscription = await db.subscriptions.findUnique({
-      where: { id: subscriptionId },
-      include: {
-        organizations: { select: { id: true, name: true } },
-        subscriptionPlan: { select: { id: true, name: true, tier: true } }
-      }
-    })
+    const subscription = await dbService.executeWithRetry(
+      (client) => client.subscriptions.findUnique({
+        where: { id: subscriptionId },
+        include: {
+          organizations: { select: { id: true, name: true } },
+          subscriptionPlan: { select: { id: true, name: true, tier: true, priceMonthly: true } }
+        }
+      }),
+      'subscriptions.findUnique for update'
+    )
 
     if (!subscription) {
       return NextResponse.json({ 
@@ -165,17 +170,20 @@ export async function PATCH(req: NextRequest) {
 
     switch (action) {
       case 'cancel':
-        updatedSubscription = await db.subscriptions.update({
-          where: { id: subscriptionId },
-          data: { 
-            status: 'CANCELLED',
-            cancelledAt: new Date()
-          },
-          include: {
-            organization: { select: { id: true, name: true } },
-            plan: { select: { id: true, name: true, type: true } }
-          }
-        })
+        updatedSubscription = await dbService.executeWithRetry(
+          (client) => client.subscriptions.update({
+            where: { id: subscriptionId },
+            data: { 
+              status: 'CANCELLED',
+              cancelledAt: new Date()
+            },
+            include: {
+              organizations: { select: { id: true, name: true } },
+              subscriptionPlan: { select: { id: true, name: true, tier: true } }
+            }
+          }),
+          'subscriptions.update cancel'
+        )
         auditAction = AuditAction.SUBSCRIPTION_CANCELLED
         auditDetails.reason = data.reason
         auditDetails.cancelledBy = session.user.id
@@ -191,18 +199,21 @@ export async function PATCH(req: NextRequest) {
         const newEndDate = new Date()
         newEndDate.setMonth(newEndDate.getMonth() + 1) // Extend by 1 month
 
-        updatedSubscription = await db.subscriptions.update({
-          where: { id: subscriptionId },
-          data: { 
-            status: 'ACTIVE',
-            cancelledAt: null,
-            currentPeriodEnd: newEndDate
-          },
-          include: {
-            organization: { select: { id: true, name: true } },
-            plan: { select: { id: true, name: true, type: true } }
-          }
-        })
+        updatedSubscription = await dbService.executeWithRetry(
+          (client) => client.subscriptions.update({
+            where: { id: subscriptionId },
+            data: { 
+              status: 'ACTIVE',
+              cancelledAt: null,
+              currentPeriodEnd: newEndDate
+            },
+            include: {
+              organizations: { select: { id: true, name: true } },
+              subscriptionPlan: { select: { id: true, name: true, tier: true } }
+            }
+          }),
+          'subscriptions.update reactivate'
+        )
         auditAction = AuditAction.SUBSCRIPTION_UPDATED
         auditDetails.action = 'reactivated'
         auditDetails.newEndDate = newEndDate
@@ -215,7 +226,7 @@ export async function PATCH(req: NextRequest) {
           }, { status: 400 })
         }
 
-        const newPlan = await db.subscriptionsPlan.findUnique({
+        const newPlan = await dbService.findUnique('subscription_plans', {
           where: { id: data.newPlanId }
         })
 
@@ -227,16 +238,19 @@ export async function PATCH(req: NextRequest) {
 
         const isUpgrade = (newPlan.priceMonthly || 0) > (subscription.subscriptionPlan?.priceMonthly || 0)
 
-        updatedSubscription = await db.subscriptions.update({
-          where: { id: subscriptionId },
-          data: { 
-            planId: data.newPlanId
-          },
-          include: {
-            organization: { select: { id: true, name: true } },
-            plan: { select: { id: true, name: true, type: true } }
-          }
-        })
+        updatedSubscription = await dbService.executeWithRetry(
+          (client) => client.subscriptions.update({
+            where: { id: subscriptionId },
+            data: { 
+              planId: data.newPlanId
+            },
+            include: {
+              organizations: { select: { id: true, name: true } },
+              subscriptionPlan: { select: { id: true, name: true, tier: true } }
+            }
+          }),
+          'subscriptions.update change_plan'
+        )
         
         auditAction = isUpgrade ? AuditAction.SUBSCRIPTION_UPGRADED : AuditAction.SUBSCRIPTION_DOWNGRADED
         auditDetails.oldPlan = subscription.subscriptionPlan?.name
@@ -255,16 +269,19 @@ export async function PATCH(req: NextRequest) {
         const extendedEndDate = new Date(subscription.currentPeriodEnd)
         extendedEndDate.setDate(extendedEndDate.getDate() + parseInt(data.extensionDays))
 
-        updatedSubscription = await db.subscriptions.update({
-          where: { id: subscriptionId },
-          data: { 
-            currentPeriodEnd: extendedEndDate
-          },
-          include: {
-            organization: { select: { id: true, name: true } },
-            plan: { select: { id: true, name: true, type: true } }
-          }
-        })
+        updatedSubscription = await dbService.executeWithRetry(
+          (client) => client.subscriptions.update({
+            where: { id: subscriptionId },
+            data: { 
+              currentPeriodEnd: extendedEndDate
+            },
+            include: {
+              organizations: { select: { id: true, name: true } },
+              subscriptionPlan: { select: { id: true, name: true, tier: true } }
+            }
+          }),
+          'subscriptions.update extend'
+        )
         
         auditAction = AuditAction.SUBSCRIPTION_UPDATED
         auditDetails.action = 'extended'
@@ -315,7 +332,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Check if organization exists
-    const organization = await db.organizations.findUnique({
+    const organization = await dbService.findUnique('organizations', {
       where: { id: organizationId }
     })
 
@@ -326,7 +343,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Check if plan exists
-    const plan = await db.subscriptionsPlan.findUnique({
+    const plan = await dbService.findUnique('subscription_plans', {
       where: { id: planId }
     })
 
@@ -337,12 +354,15 @@ export async function POST(req: NextRequest) {
     }
 
     // Check if organization already has an active subscription
-    const existingSubscription = await db.subscriptions.findFirst({
-      where: {
-        organizationId,
-        status: { in: ['ACTIVE', 'PAST_DUE'] }
-      }
-    })
+    const existingSubscription = await dbService.executeWithRetry(
+      (client) => client.subscriptions.findFirst({
+        where: {
+          organizationId,
+          status: { in: ['ACTIVE', 'PAST_DUE'] }
+        }
+      }),
+      'subscriptions.findFirst check existing'
+    )
 
     if (existingSubscription) {
       return NextResponse.json({ 
@@ -354,19 +374,22 @@ export async function POST(req: NextRequest) {
     const endDate = new Date()
     endDate.setMonth(endDate.getMonth() + 1) // 1 month from now
 
-    const subscription = await db.subscriptions.create({
-      data: {
-        organizationId,
-        planId,
-        status: 'ACTIVE',
-        currentPeriodStart: new Date(),
-        currentPeriodEnd: endDate
-      },
-      include: {
-        organizations: { select: { id: true, name: true } },
-        subscriptionPlan: { select: { id: true, name: true, tier: true } }
-      }
-    })
+    const subscription = await dbService.executeWithRetry(
+      (client) => client.subscriptions.create({
+        data: {
+          organizationId,
+          planId,
+          status: 'ACTIVE',
+          currentPeriodStart: new Date(),
+          currentPeriodEnd: endDate
+        },
+        include: {
+          organizations: { select: { id: true, name: true } },
+          subscriptionPlan: { select: { id: true, name: true, tier: true } }
+        }
+      }),
+      'subscriptions.create new subscription'
+    )
 
     await AuditLogService.logSubscriptionAction(
       AuditAction.SUBSCRIPTION_CREATED,

@@ -60,7 +60,69 @@ export default function SystemLogsPage() {
   const [selectedLog, setSelectedLog] = useState<AuditLogEntry | null>(null)
   const [showDetailModal, setShowDetailModal] = useState(false)
 
-  // Mock data for demonstration since audit logging is not fully implemented in DB
+  useEffect(() => {
+    fetchLogs()
+  }, [page, search, actionFilter, roleFilter, dateRange])
+
+  const fetchLogs = async () => {
+    try {
+      setLoading(true)
+      
+      // Build query parameters
+      const params = new URLSearchParams({
+        page: '1', // Always start with page 1 for now
+        limit: '50'
+      })
+      
+      if (actionFilter !== 'all') params.append('action', actionFilter)
+      if (search) params.append('userId', search) // Assuming search is for user
+      
+      // Handle date range
+      if (dateRange !== 'all') {
+        const now = new Date()
+        const dateFrom = new Date()
+        
+        switch (dateRange) {
+          case '24h':
+            dateFrom.setHours(now.getHours() - 24)
+            break
+          case '7d':
+            dateFrom.setDate(now.getDate() - 7)
+            break
+          case '30d':
+            dateFrom.setDate(now.getDate() - 30)
+            break
+        }
+        
+        params.append('dateFrom', dateFrom.toISOString())
+        params.append('dateTo', now.toISOString())
+      }
+
+      const response = await fetch(`/api/admin/logs?${params}`)
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch audit logs')
+      }
+
+      const data = await response.json()
+      setLogs(data.logs)
+      setPagination({
+        page: data.page,
+        limit: data.limit,
+        total: data.total,
+        totalPages: data.totalPages
+      })
+      setError(null)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load logs')
+      // Fall back to mock data if API fails
+      setLogs(mockLogs)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Mock data for demonstration/fallback since audit logging table might be empty
   const mockLogs: AuditLogEntry[] = [
     {
       id: 'audit_1',
@@ -127,71 +189,6 @@ export default function SystemLogsPage() {
       timestamp: new Date(Date.now() - 900000).toISOString()
     }
   ]
-
-  useEffect(() => {
-    fetchLogs()
-  }, [page, search, actionFilter, roleFilter, dateRange])
-
-  const fetchLogs = async () => {
-    try {
-      setLoading(true)
-      
-      // Simulate API call with mock data
-      await new Promise(resolve => setTimeout(resolve, 500))
-      
-      let filteredLogs = [...mockLogs]
-      
-      // Apply filters
-      if (search) {
-        filteredLogs = filteredLogs.filter(log => 
-          log.actorEmail.toLowerCase().includes(search.toLowerCase()) ||
-          log.action.toLowerCase().includes(search.toLowerCase()) ||
-          JSON.stringify(log.details).toLowerCase().includes(search.toLowerCase())
-        )
-      }
-      
-      if (actionFilter !== 'all') {
-        filteredLogs = filteredLogs.filter(log => log.action.includes(actionFilter))
-      }
-      
-      if (roleFilter !== 'all') {
-        filteredLogs = filteredLogs.filter(log => log.actorRole === roleFilter)
-      }
-      
-      // Date range filter
-      const now = new Date()
-      let cutoffDate = new Date()
-      switch (dateRange) {
-        case '1h':
-          cutoffDate.setHours(cutoffDate.getHours() - 1)
-          break
-        case '24h':
-          cutoffDate.setDate(cutoffDate.getDate() - 1)
-          break
-        case '7d':
-          cutoffDate.setDate(cutoffDate.getDate() - 7)
-          break
-        case '30d':
-          cutoffDate.setDate(cutoffDate.getDate() - 30)
-          break
-      }
-      
-      filteredLogs = filteredLogs.filter(log => new Date(log.timestamp) >= cutoffDate)
-      
-      setLogs(filteredLogs)
-      setPagination({
-        page,
-        limit: 20,
-        total: filteredLogs.length,
-        totalPages: Math.ceil(filteredLogs.length / 20)
-      })
-      setError(null)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred')
-    } finally {
-      setLoading(false)
-    }
-  }
 
   const getActionIcon = (action: string) => {
     if (action.includes('USER')) return <User className="h-4 w-4" />

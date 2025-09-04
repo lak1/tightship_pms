@@ -722,19 +722,29 @@ export default function AdminSettingsPage() {
           </div>
         </div>
 
-        {/* Note about demo */}
-        <div className="mt-6 bg-blue-50 border border-blue-200 rounded-md p-4">
-          <div className="flex">
-            <Info className="h-5 w-5 text-blue-400" />
-            <div className="ml-3">
-              <h3 className="text-sm font-medium text-blue-800">Demo Configuration</h3>
-              <p className="mt-2 text-sm text-blue-700">
-                This settings interface demonstrates the configuration options that would be available. 
-                In production, these settings would be stored in the database and applied system-wide.
-              </p>
+        {/* Save status */}
+        {saveStatus && (
+          <div className={`mt-6 rounded-md p-4 ${
+            saveStatus.type === 'success' 
+              ? 'bg-green-50 border border-green-200' 
+              : 'bg-red-50 border border-red-200'
+          }`}>
+            <div className="flex">
+              {saveStatus.type === 'success' ? (
+                <CheckCircle className="h-5 w-5 text-green-400" />
+              ) : (
+                <XCircle className="h-5 w-5 text-red-400" />
+              )}
+              <div className="ml-3">
+                <p className={`text-sm font-medium ${
+                  saveStatus.type === 'success' ? 'text-green-800' : 'text-red-800'
+                }`}>
+                  {saveStatus.message}
+                </p>
+              </div>
             </div>
           </div>
-        </div>
+        )}
       </div>
     </AdminLayout>
   )

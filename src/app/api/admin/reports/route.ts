@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { db } from '@/lib/db'
+import { dbService } from '@/lib/db-service'
 import { AuditLogService, AuditAction } from '@/lib/services/audit-log'
 import { logger } from '@/lib/logger'
 
@@ -82,29 +83,23 @@ export async function GET(req: NextRequest) {
 }
 
 async function generateOverviewReport(startDate: Date, endDate: Date) {
-  const [
-    totalUsers,
-    totalOrganizations,
-    totalSubscriptions,
-    activeSubscriptions,
-    newUsersInPeriod,
-    newOrganizationsInPeriod,
-    revenueData
-  ] = await Promise.all([
-    db.users.count(),
-    db.organizations.count(),
-    db.subscriptions.count(),
-    db.subscriptions.count({ where: { status: 'ACTIVE' } }),
-    db.users.count({ where: { createdAt: { gte: startDate, lte: endDate } } }),
-    db.organizations.count({ where: { createdAt: { gte: startDate, lte: endDate } } }),
-    db.subscriptions.findMany({
+  // Use sequential calls to avoid connection pool exhaustion on free tier
+  const totalUsers = await dbService.count('users')
+  const totalOrganizations = await dbService.count('organizations')
+  const totalSubscriptions = await dbService.count('subscriptions')
+  const activeSubscriptions = await dbService.count('subscriptions', { where: { status: 'ACTIVE' } })
+  const newUsersInPeriod = await dbService.count('users', { where: { createdAt: { gte: startDate, lte: endDate } } })
+  const newOrganizationsInPeriod = await dbService.count('organizations', { where: { createdAt: { gte: startDate, lte: endDate } } })
+  const revenueData = await dbService.executeWithRetry(
+    (client) => client.subscriptions.findMany({
       where: {
         status: 'ACTIVE',
         createdAt: { gte: startDate, lte: endDate }
       },
       include: { subscriptionPlan: { select: { priceMonthly: true } } }
-    })
-  ])
+    }),
+    'subscriptions.findMany for revenue'
+  )
 
   const totalRevenue = revenueData.reduce((sum, sub) => sum + (sub.subscriptionPlan?.priceMonthly || 0), 0)
 
@@ -128,25 +123,28 @@ async function generateOverviewReport(startDate: Date, endDate: Date) {
 }
 
 async function generateUsersReport(startDate: Date, endDate: Date) {
-  const users = await db.users.findMany({
-    where: {
-      createdAt: { gte: startDate, lte: endDate }
-    },
-    include: {
-      organizations: {
-        select: { name: true, slug: true }
-      }
-    },
-    orderBy: { createdAt: 'desc' }
-  })
+  const users = await dbService.executeWithRetry(
+    (client) => client.users.findMany({
+      where: {
+        createdAt: { gte: startDate, lte: endDate }
+      },
+      include: {
+        organizations: {
+          select: { name: true, slug: true }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    }),
+    'users.findMany with organizations'
+  )
 
-  const roleBreakdown = await db.users.groupBy({
+  const roleBreakdown = await dbService.groupBy('users', {
     by: ['role'],
     _count: true,
     where: { createdAt: { gte: startDate, lte: endDate } }
   })
 
-  const statusBreakdown = await db.users.groupBy({
+  const statusBreakdown = await dbService.groupBy('users', {
     by: ['isActive'],
     _count: true,
     where: { createdAt: { gte: startDate, lte: endDate } }
@@ -172,27 +170,30 @@ async function generateUsersReport(startDate: Date, endDate: Date) {
 }
 
 async function generateOrganizationsReport(startDate: Date, endDate: Date) {
-  const organizations = await db.organizations.findMany({
-    where: {
-      createdAt: { gte: startDate, lte: endDate }
-    },
-    include: {
-      _count: {
-        select: {
-          users: true,
-          restaurants: true
-        }
+  const organizations = await dbService.executeWithRetry(
+    (client) => client.organizations.findMany({
+      where: {
+        createdAt: { gte: startDate, lte: endDate }
       },
-      subscriptions: {
-        include: {
-          subscriptionPlan: {
-            select: { name: true, priceMonthly: true }
+      include: {
+        _count: {
+          select: {
+            users: true,
+            restaurants: true
+          }
+        },
+        subscriptions: {
+          include: {
+            subscriptionPlan: {
+              select: { name: true, priceMonthly: true }
+            }
           }
         }
-      }
-    },
-    orderBy: { createdAt: 'desc' }
-  })
+      },
+      orderBy: { createdAt: 'desc' }
+    }),
+    'organizations.findMany with counts and subscriptions'
+  )
 
   return {
     organizations: organizations.map(org => ({
@@ -215,38 +216,46 @@ async function generateOrganizationsReport(startDate: Date, endDate: Date) {
 }
 
 async function generateSubscriptionsReport(startDate: Date, endDate: Date) {
-  const subscriptions = await db.subscriptions.findMany({
-    where: {
-      createdAt: { gte: startDate, lte: endDate }
-    },
-    include: {
-      organizations: {
-        select: { name: true, slug: true }
+  const subscriptions = await dbService.executeWithRetry(
+    (client) => client.subscriptions.findMany({
+      where: {
+        createdAt: { gte: startDate, lte: endDate }
       },
-      plan: {
-        select: { name: true, type: true, price: true }
-      }
-    },
-    orderBy: { createdAt: 'desc' }
-  })
+      include: {
+        organizations: {
+          select: { name: true, slug: true }
+        },
+        subscriptionPlan: {
+          select: { name: true, tier: true, priceMonthly: true }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    }),
+    'subscriptions.findMany with organizations and plans'
+  )
 
-  const statusBreakdown = await db.subscriptions.groupBy({
+  const statusBreakdown = await dbService.groupBy('subscriptions', {
     by: ['status'],
     _count: true,
     where: { createdAt: { gte: startDate, lte: endDate } }
   })
 
-  const planBreakdown = await db.subscriptions.findMany({
-    where: { createdAt: { gte: startDate, lte: endDate } },
-    include: { subscriptionPlan: { select: { name: true } } }
-  }).then(subs => {
+  const planBreakdownSubs = await dbService.executeWithRetry(
+    (client) => client.subscriptions.findMany({
+      where: { createdAt: { gte: startDate, lte: endDate } },
+      include: { subscriptionPlan: { select: { name: true } } }
+    }),
+    'subscriptions.findMany for plan breakdown'
+  )
+  
+  const planBreakdown = (() => {
     const breakdown = {}
-    subs.forEach(sub => {
+    planBreakdownSubs.forEach(sub => {
       const planName = sub.subscriptionPlan?.name || 'Unknown'
       breakdown[planName] = (breakdown[planName] || 0) + 1
     })
     return Object.entries(breakdown).map(([name, count]) => ({ planName: name, count }))
-  })
+  })()
 
   return {
     subscriptions: subscriptions.map(sub => ({
@@ -272,16 +281,19 @@ async function generateSubscriptionsReport(startDate: Date, endDate: Date) {
 }
 
 async function generateRevenueReport(startDate: Date, endDate: Date) {
-  const activeSubscriptions = await db.subscriptions.findMany({
-    where: {
-      status: 'ACTIVE',
-      createdAt: { gte: startDate, lte: endDate }
-    },
-    include: {
-      subscriptionPlan: { select: { name: true, priceMonthly: true } },
-      organizations: { select: { name: true } }
-    }
-  })
+  const activeSubscriptions = await dbService.executeWithRetry(
+    (client) => client.subscriptions.findMany({
+      where: {
+        status: 'ACTIVE',
+        createdAt: { gte: startDate, lte: endDate }
+      },
+      include: {
+        subscriptionPlan: { select: { name: true, priceMonthly: true } },
+        organizations: { select: { name: true } }
+      }
+    }),
+    'subscriptions.findMany for revenue report'
+  )
 
   const monthlyRevenue = activeSubscriptions.reduce((sum, sub) => sum + (sub.subscriptionPlan?.priceMonthly || 0), 0)
   const annualRevenue = monthlyRevenue * 12
