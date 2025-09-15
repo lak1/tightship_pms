@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import DashboardLayout from '@/components/layout/dashboard-layout'
 import Link from 'next/link'
+import LandingPage from '@/components/marketing/landing-page'
 import { 
   Building2, 
   Package, 
@@ -33,17 +34,19 @@ export default function Home() {
     enabled: !!session
   })
 
-  useEffect(() => {
-    if (status === 'loading') return
-    
-    if (!session) {
-      router.push('/auth/signin')
-      return
-    }
-  }, [session, status, router])
+  // Remove automatic redirect - we'll show landing page instead
 
-  // Loading state
-  if (status === 'loading' || statsLoading || activityLoading) {
+  // Loading state - only show loading if we're checking authentication
+  if (status === 'loading') {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600"></div>
+      </div>
+    )
+  }
+
+  // Loading state for authenticated users only
+  if (session && (statsLoading || activityLoading)) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600"></div>
@@ -53,95 +56,7 @@ export default function Home() {
 
   // Not authenticated - show landing page
   if (!session) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-        <div className="max-w-7xl mx-auto py-12 px-4 sm:px-6 lg:px-8">
-          {/* Header */}
-          <nav className="flex justify-between items-center mb-16">
-            <div className="text-2xl font-bold text-gray-900">Tightship PMS</div>
-            <div className="space-x-4">
-              <Link 
-                href="/api/auth/signin" 
-                className="text-gray-700 hover:text-gray-900"
-              >
-                Sign In
-              </Link>
-              <Link 
-                href="/auth/signup" 
-                className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
-              >
-                Get Started
-              </Link>
-            </div>
-          </nav>
-
-          {/* Hero Section */}
-          <div className="text-center py-20">
-            <h1 className="text-5xl font-bold tracking-tight text-gray-900 sm:text-6xl mb-6">
-              Tightship Price Manager
-            </h1>
-            <p className="text-xl text-gray-600 max-w-3xl mx-auto mb-8">
-              Centralized pricing management for restaurants. 
-              Synchronize your menu prices across Deliveroo, Uber Eats, Just Eat, 
-              and your POS systems from one dashboard.
-            </p>
-            <div className="flex justify-center gap-4">
-              <Link
-                href="/auth/signup"
-                className="bg-blue-600 text-white px-8 py-3 rounded-lg text-lg font-medium hover:bg-blue-700 transition"
-              >
-                Start Free Trial
-              </Link>
-              <Link
-                href="/api/auth/signin"
-                className="bg-white text-blue-600 border-2 border-blue-600 px-8 py-3 rounded-lg text-lg font-medium hover:bg-blue-50 transition"
-              >
-                Sign In
-              </Link>
-            </div>
-          </div>
-
-          {/* Features */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mt-20">
-            <div className="bg-white p-6 rounded-lg shadow-md">
-              <div className="text-3xl mb-4">🔄</div>
-              <h3 className="text-xl font-semibold mb-2">Real-time Sync</h3>
-              <p className="text-gray-600">
-                Update prices once and sync across all your delivery platforms instantly.
-              </p>
-            </div>
-            <div className="bg-white p-6 rounded-lg shadow-md">
-              <div className="text-3xl mb-4">📊</div>
-              <h3 className="text-xl font-semibold mb-2">Analytics</h3>
-              <p className="text-gray-600">
-                Track price changes, monitor performance, and optimize your menu pricing.
-              </p>
-            </div>
-            <div className="bg-white p-6 rounded-lg shadow-md">
-              <div className="text-3xl mb-4">🤖</div>
-              <h3 className="text-xl font-semibold mb-2">Automation</h3>
-              <p className="text-gray-600">
-                Set pricing rules and let the system automatically adjust prices based on demand.
-              </p>
-            </div>
-          </div>
-
-          {/* Platforms */}
-          <div className="mt-20 text-center">
-            <h2 className="text-2xl font-semibold text-gray-900 mb-8">
-              Integrated with major platforms
-            </h2>
-            <div className="flex justify-center gap-12 flex-wrap">
-              <div className="text-gray-400 text-lg font-medium">Deliveroo</div>
-              <div className="text-gray-400 text-lg font-medium">Uber Eats</div>
-              <div className="text-gray-400 text-lg font-medium">Just Eat</div>
-              <div className="text-gray-400 text-lg font-medium">Square</div>
-              <div className="text-gray-400 text-lg font-medium">Toast</div>
-            </div>
-          </div>
-        </div>
-      </div>
-    )
+    return <LandingPage />
   }
 
   const formatTimeAgo = (dateString: string) => {

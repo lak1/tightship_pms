@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { z } from 'zod'
 import { publicApiRateLimit, shouldRateLimit } from '@/lib/ratelimit'
+import { StripeService } from '@/lib/services/stripe'
 
 // Public API for fetching restaurant menu data
 // Can be cached at CDN level for performance
@@ -92,6 +93,11 @@ export async function GET(
         { status: 404 }
       )
     }
+
+    // Record API usage for billing (async, don't wait)
+    StripeService.recordApiUsage(restaurant.organizationId).catch(error => {
+      console.warn('Failed to record API usage:', error)
+    })
 
     // Transform data based on format
     if (query.format === 'simple') {

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db } from '@/lib/db'
+import { db as db } from '@/lib/db'
 import { logger } from '@/lib/logger'
 
 // Basic health check endpoint

@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { hash } from 'bcryptjs'
-import { db } from '@/lib/db'
+import { db as db } from '@/lib/db'
 import { authRateLimit, shouldRateLimit } from '@/lib/ratelimit'
 import { captureError, captureDatabaseError, ErrorCategory } from '@/lib/sentry'
+import { StripeService } from '@/lib/services/stripe'
 
 export async function POST(req: NextRequest) {
   let body: any
@@ -19,7 +20,7 @@ export async function POST(req: NextRequest) {
     const { email, password, name, organizationName } = body
 
     // Check if user already exists
-    const existingUser = await db.user.findUnique({
+    const existingUser = await db.users.findUnique({
       where: { email },
     })
 
@@ -36,12 +37,12 @@ export async function POST(req: NextRequest) {
     let counter = 1
     
     // Check if slug exists and make it unique
-    while (await db.organization.findUnique({ where: { slug } })) {
+    while (await db.organizations.findUnique({ where: { slug } })) {
       slug = `${baseSlug}-${counter}`
       counter++
     }
 
-    const organization = await db.organization.create({
+    const organization = await db.organizations.create({
       data: {
         name: organizationName,
         slug,
@@ -56,7 +57,7 @@ export async function POST(req: NextRequest) {
     const hashedPassword = await hash(password, 12)
 
     // Create user
-    const user = await db.user.create({
+    const user = await db.users.create({
       data: {
         email,
         name,
@@ -67,7 +68,7 @@ export async function POST(req: NextRequest) {
     })
 
     // Create default restaurant
-    const restaurant = await db.restaurant.create({
+    const restaurant = await db.restaurants.create({
       data: {
         organizationId: organization.id,
         name: organizationName,
@@ -78,7 +79,7 @@ export async function POST(req: NextRequest) {
     })
 
     // Create default menu
-    const menu = await db.menu.create({
+    const menu = await db.menus.create({
       data: {
         restaurantId: restaurant.id,
         name: 'Main Menu',
@@ -94,10 +95,56 @@ export async function POST(req: NextRequest) {
     ]
 
     for (const platform of platformData) {
-      await db.platform.upsert({
+      await db.platforms.upsert({
         where: { name: platform.name },
         update: {},
         create: platform as any,
+      })
+    }
+
+    // Create Stripe customer
+    let stripeCustomer = null
+    try {
+      stripeCustomer = await StripeService.createCustomer({
+        email,
+        name,
+        organizationId: organization.id,
+        organizationName,
+      })
+
+      // Create free trial subscription
+      await db.subscriptions.create({
+        data: {
+          organizationId: organization.id,
+          plan: 'FREE',
+          status: 'TRIALING',
+          stripeCustomerId: stripeCustomer.id,
+          currentPeriodStart: new Date(),
+          currentPeriodEnd: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000), // 14 days from now
+        },
+      })
+    } catch (stripeError) {
+      // Log Stripe error but don't fail signup
+      console.warn('Failed to create Stripe customer during signup:', stripeError)
+      captureError(
+        stripeError as Error,
+        ErrorCategory.INTEGRATION,
+        {
+          operation: 'stripe_customer_creation',
+          organizationId: organization.id,
+          email,
+        }
+      )
+
+      // Create free subscription without Stripe
+      await db.subscriptions.create({
+        data: {
+          organizationId: organization.id,
+          plan: 'FREE',
+          status: 'TRIALING',
+          currentPeriodStart: new Date(),
+          currentPeriodEnd: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000), // 14 days from now
+        },
       })
     }
 
@@ -108,6 +155,7 @@ export async function POST(req: NextRequest) {
         email: user.email,
         name: user.name,
       },
+      stripeCustomerId: stripeCustomer?.id,
     })
   } catch (error) {
     // Capture error with context

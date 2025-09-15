@@ -1,5 +1,4 @@
 import { createTRPCRouter, organizationProcedure } from '../trpc'
-import { dbService } from '@/lib/db-service'
 
 export const dashboardRouter = createTRPCRouter({
   getStats: organizationProcedure.query(async ({ ctx }) => {
@@ -76,54 +75,48 @@ export const dashboardRouter = createTRPCRouter({
     const organizationId = ctx.session.user.organizationId
 
     // Get recent sync jobs with retry logic
-    const recentSyncs = await dbService.executeWithRetry(
-      (client) => client.sync_jobs.findMany({
-        where: {
-          restaurants: {
-            organizationId,
+    const recentSyncs = await ctx.db.sync_jobs.findMany({
+      where: {
+        restaurants: {
+          organizationId,
+        },
+      },
+      include: {
+        integrations: {
+          include: {
+            platforms: true,
           },
         },
-        include: {
-          integrations: {
-            include: {
-              platforms: true,
-            },
-          },
-          restaurants: true,
-        },
-        orderBy: {
-          createdAt: 'desc',
-        },
-        take: 10,
-      }),
-      'sync_jobs.findMany'
-    ).catch((error) => {
+        restaurants: true,
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+      take: 10,
+    }).catch((error) => {
       console.warn('Failed to get recent syncs:', error)
       return []
     })
 
     // Get recent price changes with retry logic
-    const recentPriceChanges = await dbService.executeWithRetry(
-      (client) => client.price_history.findMany({
-        where: {
-          products: {
-            menus: {
-              restaurants: {
-                organizationId,
-              },
+    const recentPriceChanges = await ctx.db.price_history.findMany({
+      where: {
+        products: {
+          menus: {
+            restaurants: {
+              organizationId,
             },
           },
         },
-        include: {
-          products: true,
-        },
-        orderBy: {
-          createdAt: 'desc',
-        },
-        take: 10,
-      }),
-      'price_history.findMany'
-    ).catch((error) => {
+      },
+      include: {
+        products: true,
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+      take: 10,
+    }).catch((error) => {
       console.warn('Failed to get recent price changes:', error)
       return []
     })

@@ -24,6 +24,12 @@ interface Plan {
     restaurants: number;
     products: number;
     apiCalls: number;
+    menus: number;
+  };
+  integrations: {
+    basicApi: boolean;
+    eposIntegration: boolean;
+    deliveryPlatforms: boolean;
   };
   isCurrent?: boolean;
   isUpgrade?: boolean;
@@ -50,12 +56,14 @@ export function PlanComparison({
     switch (tier) {
       case 'FREE':
         return <Zap className="h-5 w-5 text-blue-500" />;
-      case 'STARTER':
+      case 'SINGLE':
         return <Building className="h-5 w-5 text-green-500" />;
-      case 'PROFESSIONAL':
-        return <Crown className="h-5 w-5 text-purple-500" />;
+      case 'MULTI':
+        return <Crown className="h-5 w-5 text-teal-500" />;
+      case 'GROWING':
+        return <Rocket className="h-5 w-5 text-purple-500" />;
       case 'ENTERPRISE':
-        return <Rocket className="h-5 w-5 text-orange-500" />;
+        return <Crown className="h-5 w-5 text-orange-500" />;
       default:
         return <Zap className="h-5 w-5" />;
     }
@@ -76,7 +84,7 @@ export function PlanComparison({
 
   const getButtonVariant = (plan: Plan) => {
     if (plan.isCurrent) return 'outline';
-    if (plan.isUpgrade || plan.tier === 'PROFESSIONAL') return 'default';
+    if (plan.isUpgrade || plan.tier === 'MULTI') return 'default';
     return 'outline';
   };
 
@@ -93,11 +101,11 @@ export function PlanComparison({
         <Card 
           key={plan.id} 
           className={`relative ${
-            plan.tier === 'PROFESSIONAL' ? 'ring-2 ring-purple-500 shadow-lg' : ''
+            plan.tier === 'MULTI' ? 'ring-2 ring-teal-500 shadow-lg' : ''
           }`}
         >
-          {plan.tier === 'PROFESSIONAL' && (
-            <Badge className="absolute -top-2 left-1/2 -translate-x-1/2 bg-purple-500">
+          {plan.tier === 'MULTI' && (
+            <Badge className="absolute -top-2 left-1/2 -translate-x-1/2 bg-teal-500">
               Most Popular
             </Badge>
           )}
@@ -132,12 +140,16 @@ export function PlanComparison({
             {/* Limits */}
             <div className="space-y-2 text-sm">
               <div className="flex items-center justify-between">
-                <span>Restaurants</span>
+                <span>Restaurant Locations</span>
                 <span className="font-medium">{formatLimit(plan.limits.restaurants)}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span>Products</span>
+                <span>Menu Items</span>
                 <span className="font-medium">{formatLimit(plan.limits.products)}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span>Menus per Location</span>
+                <span className="font-medium">{formatLimit(plan.limits.menus)}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span>API Calls/month</span>
@@ -161,6 +173,43 @@ export function PlanComparison({
                     </span>
                   </div>
                 ))}
+              </div>
+            </div>
+
+            {/* Integrations */}
+            <div className="space-y-2">
+              <h4 className="font-medium text-sm">Integrations:</h4>
+              <div className="space-y-1">
+                <div className="flex items-center gap-2 text-sm">
+                  {plan.integrations.basicApi ? (
+                    <Check className="h-4 w-4 text-green-500" />
+                  ) : (
+                    <X className="h-4 w-4 text-gray-300" />
+                  )}
+                  <span className={plan.integrations.basicApi ? '' : 'text-gray-400'}>
+                    Website API
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 text-sm">
+                  {plan.integrations.eposIntegration ? (
+                    <Check className="h-4 w-4 text-green-500" />
+                  ) : (
+                    <X className="h-4 w-4 text-gray-300" />
+                  )}
+                  <span className={plan.integrations.eposIntegration ? '' : 'text-gray-400'}>
+                    EPOS Integration
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 text-sm">
+                  {plan.integrations.deliveryPlatforms ? (
+                    <Check className="h-4 w-4 text-green-500" />
+                  ) : (
+                    <X className="h-4 w-4 text-gray-300" />
+                  )}
+                  <span className={plan.integrations.deliveryPlatforms ? '' : 'text-gray-400'}>
+                    Delivery Platforms
+                  </span>
+                </div>
               </div>
             </div>
 

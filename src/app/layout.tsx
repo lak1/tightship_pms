@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { TRPCProvider } from "@/providers/trpc-provider";
 import AuthSessionProvider from "@/providers/session-provider";
+import { Toaster } from "sonner";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -15,8 +16,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Tightship Price Manager",
-  description: "Centralized pricing management for restaurants",
+  title: "Tightship Menu Manager",
+  description: "Centralized menu management for restaurants",
 };
 
 export default function RootLayout({
@@ -31,6 +32,7 @@ export default function RootLayout({
       >
         <AuthSessionProvider>
           <TRPCProvider>{children}</TRPCProvider>
+          <Toaster />
         </AuthSessionProvider>
       </body>
     </html>

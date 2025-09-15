@@ -2,7 +2,7 @@ import { initTRPC, TRPCError } from '@trpc/server'
 import { type NextRequest } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
-import { db } from '@/lib/db'
+import { db as db } from '@/lib/db'
 import superjson from 'superjson'
 import { ZodError } from 'zod'
 
