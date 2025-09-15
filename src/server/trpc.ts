@@ -5,6 +5,7 @@ import { authOptions } from '@/lib/auth'
 import { db as db } from '@/lib/db'
 import superjson from 'superjson'
 import { ZodError } from 'zod'
+import { createSubscriptionProcedure, type TRPCSubscriptionOptions } from '@/lib/middleware/trpc-subscription'
 
 export const createTRPCContext = async (req: NextRequest) => {
   const session = await getServerSession(authOptions)
@@ -73,3 +74,6 @@ export const organizationProcedure = protectedProcedure.use(
     })
   })
 )
+
+export const subscriptionProcedure = (options: TRPCSubscriptionOptions = {}) =>
+  createSubscriptionProcedure(organizationProcedure, options)

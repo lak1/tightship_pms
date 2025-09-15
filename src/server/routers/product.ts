@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { createTRPCRouter, organizationProcedure } from '../trpc'
+import { createTRPCRouter, organizationProcedure, subscriptionProcedure } from '../trpc'
 import { TRPCError } from '@trpc/server'
 import { transforms } from '@/lib/import-utils'
 
@@ -188,7 +188,13 @@ export const productRouter = createTRPCRouter({
       }
     }),
 
-  create: organizationProcedure
+  create: subscriptionProcedure({
+      requireLimit: {
+        type: 'products',
+        amount: 1
+      },
+      allowTrial: true
+    })
     .input(createProductSchema)
     .mutation(async ({ ctx, input }) => {
       // Verify menu belongs to user's organization
@@ -504,6 +510,44 @@ export const productRouter = createTRPCRouter({
     )
     .mutation(async ({ ctx, input }) => {
       const { restaurantId, menuId, products, options } = input
+
+      // Check subscription limits for bulk import
+      const { SubscriptionService } = await import('@/lib/subscriptions')
+      const organizationId = ctx.session.user.organizationId
+
+      // Count products to be created (not updated)
+      let productsToCreate = products.length
+      if (options.updateExisting) {
+        // For bulk import, we need to pre-check how many are actually new
+        const existingSkus = products.map(p => p.sku).filter((sku): sku is string => Boolean(sku))
+        const existingProducts = await ctx.db.products.findMany({
+          where: {
+            sku: { in: existingSkus }
+          },
+          select: { sku: true }
+        })
+        const existingSkuSet = new Set(existingProducts.map(p => p.sku))
+        productsToCreate = products.filter(p => !p.sku || !existingSkuSet.has(p.sku)).length
+      }
+
+      const limitCheck = await SubscriptionService.checkLimit(
+        organizationId,
+        'products',
+        productsToCreate
+      )
+
+      if (!limitCheck.allowed) {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: `Cannot import ${productsToCreate} products. ${limitCheck.message || 'Usage limit exceeded'}`,
+          cause: {
+            currentUsage: limitCheck.currentUsage,
+            limit: limitCheck.limit,
+            requestedAmount: productsToCreate,
+            upgradeUrl: '/billing'
+          }
+        })
+      }
 
       // Verify restaurant and menu belong to user's organization
       const menu = await ctx.db.menus.findFirst({

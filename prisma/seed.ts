@@ -7,7 +7,7 @@ async function main() {
 
   // Create platforms
   const platforms = await Promise.all([
-    prisma.platform.upsert({
+    prisma.platforms.upsert({
       where: { name: 'Deliveroo' },
       update: {},
       create: {
@@ -20,7 +20,7 @@ async function main() {
         }),
       },
     }),
-    prisma.platform.upsert({
+    prisma.platforms.upsert({
       where: { name: 'Uber Eats' },
       update: {},
       create: {
@@ -33,7 +33,7 @@ async function main() {
         }),
       },
     }),
-    prisma.platform.upsert({
+    prisma.platforms.upsert({
       where: { name: 'Just Eat' },
       update: {},
       create: {
@@ -46,7 +46,7 @@ async function main() {
         }),
       },
     }),
-    prisma.platform.upsert({
+    prisma.platforms.upsert({
       where: { name: 'Square POS' },
       update: {},
       create: {
@@ -59,7 +59,7 @@ async function main() {
         }),
       },
     }),
-    prisma.platform.upsert({
+    prisma.platforms.upsert({
       where: { name: 'Website' },
       update: {},
       create: {
@@ -78,7 +78,7 @@ async function main() {
 
   // Create tax rates
   const taxRates = await Promise.all([
-    prisma.taxRate.upsert({
+    prisma.tax_rates.upsert({
       where: { id: 'tax-rate-1' },
       update: {},
       create: {
@@ -88,7 +88,7 @@ async function main() {
         description: 'UK Standard VAT rate',
       },
     }),
-    prisma.taxRate.upsert({
+    prisma.tax_rates.upsert({
       where: { id: 'tax-rate-2' },
       update: {},
       create: {
@@ -98,7 +98,7 @@ async function main() {
         description: 'UK Reduced VAT rate for food',
       },
     }),
-    prisma.taxRate.upsert({
+    prisma.tax_rates.upsert({
       where: { id: 'tax-rate-3' },
       update: {},
       create: {
@@ -113,7 +113,7 @@ async function main() {
   console.log(`✅ Created ${taxRates.length} tax rates`)
 
   // Create demo organization
-  const organization = await prisma.organization.upsert({
+  const organization = await prisma.organizations.upsert({
     where: { slug: 'demo-restaurant-group' },
     update: {},
     create: {
@@ -130,13 +130,118 @@ async function main() {
 
   console.log(`✅ Created organization: ${organization.name}`)
 
+  // Create subscription plans
+  const subscriptionPlans = await Promise.all([
+    prisma.subscription_plans.upsert({
+      where: { tier: 'FREE' },
+      update: {},
+      create: {
+        tier: SubscriptionPlan.FREE,
+        name: 'Free Plan',
+        description: 'Perfect for getting started',
+        priceMonthly: 0,
+        priceYearly: 0,
+        features: JSON.stringify({
+          restaurants: true,
+          products: true,
+          integrations: true,
+          analytics: false,
+          priority_support: false,
+          custom_branding: false
+        }),
+        limits: JSON.stringify({
+          restaurants: 1,
+          products: 50,
+          apiCalls: 1000
+        }),
+      },
+    }),
+    prisma.subscription_plans.upsert({
+      where: { tier: 'STARTER' },
+      update: {},
+      create: {
+        tier: SubscriptionPlan.STARTER,
+        name: 'Starter Plan',
+        description: 'Great for small restaurants',
+        priceMonthly: 29,
+        priceYearly: 290,
+        features: JSON.stringify({
+          restaurants: true,
+          products: true,
+          integrations: true,
+          analytics: true,
+          priority_support: false,
+          custom_branding: false
+        }),
+        limits: JSON.stringify({
+          restaurants: 2,
+          products: 200,
+          apiCalls: 5000
+        }),
+      },
+    }),
+    prisma.subscription_plans.upsert({
+      where: { tier: 'PROFESSIONAL' },
+      update: {},
+      create: {
+        tier: SubscriptionPlan.PROFESSIONAL,
+        name: 'Professional Plan',
+        description: 'Perfect for growing restaurant groups',
+        priceMonthly: 99,
+        priceYearly: 990,
+        features: JSON.stringify({
+          restaurants: true,
+          products: true,
+          integrations: true,
+          analytics: true,
+          priority_support: true,
+          custom_branding: true
+        }),
+        limits: JSON.stringify({
+          restaurants: 10,
+          products: 1000,
+          apiCalls: 25000
+        }),
+      },
+    }),
+    prisma.subscription_plans.upsert({
+      where: { tier: 'ENTERPRISE' },
+      update: {},
+      create: {
+        tier: SubscriptionPlan.ENTERPRISE,
+        name: 'Enterprise Plan',
+        description: 'For large restaurant chains',
+        priceMonthly: null,
+        priceYearly: null,
+        features: JSON.stringify({
+          restaurants: true,
+          products: true,
+          integrations: true,
+          analytics: true,
+          priority_support: true,
+          custom_branding: true,
+          dedicated_account_manager: true,
+          custom_integrations: true
+        }),
+        limits: JSON.stringify({
+          restaurants: -1,
+          products: -1,
+          apiCalls: -1
+        }),
+      },
+    }),
+  ])
+
+  console.log(`✅ Created ${subscriptionPlans.length} subscription plans`)
+
   // Create subscription
-  const subscription = await prisma.subscription.upsert({
+  const subscription = await prisma.subscriptions.upsert({
     where: { organizationId: organization.id },
     update: {},
     create: {
       organizationId: organization.id,
       plan: SubscriptionPlan.PROFESSIONAL,
+      planId: subscriptionPlans[2].id, // Professional plan
       status: SubscriptionStatus.ACTIVE,
       currentPeriodStart: new Date(),
       currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days from now
@@ -146,7 +251,7 @@ async function main() {
   console.log(`✅ Created subscription for organization`)
 
   // Create demo user
-  const user = await prisma.user.upsert({
+  const user = await prisma.users.upsert({
     where: { email: 'demo@tightship.com' },
     update: {},
     create: {
@@ -161,7 +266,7 @@ async function main() {
   console.log(`✅ Created user: ${user.email}`)
 
   // Create demo restaurant
-  const restaurant = await prisma.restaurant.upsert({
+  const restaurant = await prisma.restaurants.upsert({
     where: { id: 'demo-restaurant-1' },
     update: {},
     create: {
@@ -195,7 +300,7 @@ async function main() {
   console.log(`✅ Created restaurant: ${restaurant.name}`)
 
   // Create menu
-  const menu = await prisma.menu.upsert({
+  const menu = await prisma.menus.upsert({
     where: { id: 'demo-menu-1' },
     update: {},
     create: {
@@ -210,7 +315,7 @@ async function main() {
 
   // Create categories
   const categories = await Promise.all([
-    prisma.category.upsert({
+    prisma.categories.upsert({
       where: { id: 'category-starters' },
       update: {},
       create: {
@@ -221,7 +326,7 @@ async function main() {
         displayOrder: 1,
       },
     }),
-    prisma.category.upsert({
+    prisma.categories.upsert({
       where: { id: 'category-mains' },
       update: {},
       create: {
@@ -232,7 +337,7 @@ async function main() {
         displayOrder: 2,
       },
     }),
-    prisma.category.upsert({
+    prisma.categories.upsert({
       where: { id: 'category-desserts' },
       update: {},
       create: {
@@ -243,7 +348,7 @@ async function main() {
         displayOrder: 3,
       },
     }),
-    prisma.category.upsert({
+    prisma.categories.upsert({
       where: { id: 'category-drinks' },
       update: {},
       create: {
@@ -313,7 +418,7 @@ async function main() {
   ]
 
   for (const productData of products) {
-    const product = await prisma.product.upsert({
+    const product = await prisma.products.upsert({
       where: { id: productData.id },
       update: {},
       create: {
@@ -335,7 +440,7 @@ async function main() {
 
     // Create base price (use direct create since we can't upsert with null platform)
     try {
-      await prisma.price.create({
+      await prisma.prices.create({
         data: {
           productId: product.id,
           platformId: null, // Base price
@@ -353,7 +458,7 @@ async function main() {
       const platformPrice = Math.round(productData.basePrice * markup * 100) / 100
 
       try {
-        await prisma.price.create({
+        await prisma.prices.create({
           data: {
             productId: product.id,
             platformId: platform.id,
@@ -366,7 +471,7 @@ async function main() {
       }
 
       // Create platform mapping
-      await prisma.platformMapping.upsert({
+      await prisma.platform_mappings.upsert({
         where: {
           productId_platformId: {
             productId: product.id,
@@ -391,7 +496,7 @@ async function main() {
 
   // Create sample integrations
   const integrations = await Promise.all([
-    prisma.integration.upsert({
+    prisma.integrations.upsert({
       where: {
         restaurantId_platformId: {
           restaurantId: restaurant.id,
@@ -417,7 +522,7 @@ async function main() {
         lastSyncAt: new Date(),
       },
     }),
-    prisma.integration.upsert({
+    prisma.integrations.upsert({
       where: {
         restaurantId_platformId: {
           restaurantId: restaurant.id,
@@ -449,7 +554,7 @@ async function main() {
 
   // Create sample sync jobs
   for (const integration of integrations) {
-    await prisma.syncJob.create({
+    await prisma.sync_jobs.create({
       data: {
         integrationId: integration.id,
         restaurantId: restaurant.id,

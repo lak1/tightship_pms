@@ -3,6 +3,7 @@
 import { useSession } from 'next-auth/react'
 import { trpc } from '@/lib/trpc'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { Plus, Building2, Settings, BookOpen, Users } from 'lucide-react'
 import DashboardLayout from '@/components/layout/dashboard-layout'
 
@@ -72,20 +73,24 @@ export default function RestaurantsPage() {
                     <Building2 className="h-6 w-6 text-blue-600" />
                   </div>
                   <div className="flex space-x-1">
-                    <Link
-                      href={`/restaurants/${restaurant.id}/settings`}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        router.push(`/restaurants/${restaurant.id}/settings`)
+                      }}
                       className="p-2 text-gray-400 hover:text-gray-600"
-                      onClick={(e) => e.stopPropagation()}
                     >
                       <Settings className="h-4 w-4" />
-                    </Link>
-                    <Link
-                      href={`/restaurants/${restaurant.id}/menus`}
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        router.push(`/restaurants/${restaurant.id}/menus`)
+                      }}
                       className="p-2 text-gray-400 hover:text-gray-600"
-                      onClick={(e) => e.stopPropagation()}
                     >
                       <BookOpen className="h-4 w-4" />
-                    </Link>
+                    </button>
                   </div>
                 </div>
 

@@ -69,8 +69,8 @@ export function PlanComparison({
     }
   };
 
-  const formatLimit = (limit: number) => {
-    if (limit === -1) return 'Unlimited';
+  const formatLimit = (limit: number | undefined | null) => {
+    if (!limit || limit === -1) return 'Unlimited';
     return limit.toLocaleString();
   };
 
@@ -181,32 +181,32 @@ export function PlanComparison({
               <h4 className="font-medium text-sm">Integrations:</h4>
               <div className="space-y-1">
                 <div className="flex items-center gap-2 text-sm">
-                  {plan.integrations.basicApi ? (
+                  {plan.features?.basicApi ? (
                     <Check className="h-4 w-4 text-green-500" />
                   ) : (
                     <X className="h-4 w-4 text-gray-300" />
                   )}
-                  <span className={plan.integrations.basicApi ? '' : 'text-gray-400'}>
+                  <span className={plan.features?.basicApi ? '' : 'text-gray-400'}>
                     Website API
                   </span>
                 </div>
                 <div className="flex items-center gap-2 text-sm">
-                  {plan.integrations.eposIntegration ? (
+                  {plan.features?.eposIntegration ? (
                     <Check className="h-4 w-4 text-green-500" />
                   ) : (
                     <X className="h-4 w-4 text-gray-300" />
                   )}
-                  <span className={plan.integrations.eposIntegration ? '' : 'text-gray-400'}>
+                  <span className={plan.features?.eposIntegration ? '' : 'text-gray-400'}>
                     EPOS Integration
                   </span>
                 </div>
                 <div className="flex items-center gap-2 text-sm">
-                  {plan.integrations.deliveryPlatforms ? (
+                  {plan.features?.deliveryPlatforms ? (
                     <Check className="h-4 w-4 text-green-500" />
                   ) : (
                     <X className="h-4 w-4 text-gray-300" />
                   )}
-                  <span className={plan.integrations.deliveryPlatforms ? '' : 'text-gray-400'}>
+                  <span className={plan.features?.deliveryPlatforms ? '' : 'text-gray-400'}>
                     Delivery Platforms
                   </span>
                 </div>

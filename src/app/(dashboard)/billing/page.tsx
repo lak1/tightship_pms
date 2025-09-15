@@ -2,10 +2,11 @@
 
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { SubscriptionStatus } from '@/components/billing/subscription-status'
 import { PlanComparison } from '@/components/billing/plan-comparison'
 import { toast } from 'sonner'
+import { trpc } from '@/lib/trpc'
 
 interface SubscriptionData {
   id: string
@@ -52,59 +53,47 @@ interface Plan {
 export default function BillingPage() {
   const { data: session, status } = useSession()
   const router = useRouter()
-  const [loading, setLoading] = useState(true)
-  const [subscription, setSubscription] = useState<SubscriptionData | null>(null)
-  const [usage, setUsage] = useState<Usage | null>(null)
-  const [plans, setPlans] = useState<Plan[]>([])
   const [showPlans, setShowPlans] = useState(false)
   const [upgradeLoading, setUpgradeLoading] = useState(false)
 
-  useEffect(() => {
-    if (status === 'loading') return
-    
-    if (!session) {
-      router.push('/auth/signin')
-      return
-    }
+  // TRPC queries
+  const { data: subscription, isLoading: subscriptionLoading } = trpc.subscription.getCurrent.useQuery(
+    undefined,
+    { enabled: !!session }
+  )
+  const { data: usage, isLoading: usageLoading } = trpc.subscription.getUsage.useQuery(
+    undefined,
+    { enabled: !!session }
+  )
+  const { data: rawPlans, isLoading: plansLoading } = trpc.subscription.getPlans.useQuery(
+    undefined,
+    { enabled: !!session }
+  )
 
-    fetchData()
-  }, [session, status, router])
-
-  const fetchData = async () => {
-    try {
-      const [subscriptionRes, usageRes, plansRes] = await Promise.all([
-        fetch('/api/subscription'),
-        fetch('/api/subscription/usage'),
-        fetch('/api/subscription-plans')
-      ])
-
-      if (subscriptionRes.ok) {
-        const subscriptionData = await subscriptionRes.json()
-        setSubscription(subscriptionData)
-      }
-
-      if (usageRes.ok) {
-        const usageData = await usageRes.json()
-        setUsage(usageData)
-      }
-
-      if (plansRes.ok) {
-        const plansData = await plansRes.json()
-        setPlans(plansData.map((plan: any) => ({
-          ...plan,
-          isCurrent: subscription?.subscriptionPlan?.id === plan.id || (subscription?.plan === plan.tier),
-          isUpgrade: subscription ? plan.priceMonthly > (subscription.subscriptionPlan?.priceMonthly || 0) : true,
-          isDowngrade: subscription ? plan.priceMonthly < (subscription.subscriptionPlan?.priceMonthly || 0) : false,
-          isPopular: plan.tier === 'PROFESSIONAL'
-        })))
-      }
-    } catch (error) {
-      console.error('Error fetching billing data:', error)
-      toast.error('Failed to load billing information')
-    } finally {
-      setLoading(false)
-    }
+  // Redirect if not authenticated
+  if (status === 'loading') {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-lg">Loading...</div>
+      </div>
+    )
   }
+
+  if (!session) {
+    router.push('/auth/signin')
+    return null
+  }
+
+  const loading = subscriptionLoading || usageLoading || plansLoading
+
+  // Transform plans data
+  const plans = rawPlans?.map((plan: any) => ({
+    ...plan,
+    isCurrent: subscription?.subscriptionPlan?.id === plan.id || (subscription?.plan === plan.tier),
+    isUpgrade: subscription ? (plan.priceMonthly || 0) > (subscription.subscriptionPlan?.priceMonthly || 0) : true,
+    isDowngrade: subscription ? (plan.priceMonthly || 0) < (subscription.subscriptionPlan?.priceMonthly || 0) : false,
+    isPopular: plan.tier === 'PROFESSIONAL'
+  })) || []
 
   const handleUpgrade = () => {
     setShowPlans(!showPlans)
@@ -191,15 +180,15 @@ export default function BillingPage() {
   const transformedUsage = subscription?.subscriptionPlan && usage ? {
     restaurants: { 
       currentUsage: usage.restaurants, 
-      limit: subscription.subscriptionPlan.limits.restaurants 
+      limit: subscription.subscriptionPlan.limits?.restaurants || -1
     },
     products: { 
       currentUsage: usage.products, 
-      limit: subscription.subscriptionPlan.limits.products 
+      limit: subscription.subscriptionPlan.limits?.products || -1
     },
     apiCalls: { 
       currentUsage: usage.apiCalls, 
-      limit: subscription.subscriptionPlan.limits.apiCalls 
+      limit: subscription.subscriptionPlan.limits?.apiCalls || -1
     }
   } : undefined
 

@@ -349,7 +349,7 @@ export default function LandingPage() {
                 </li>
                 <li className="flex gap-x-3">
                   <CheckCircle className="h-5 w-4 flex-none text-green-500" />
-                  100 Menu Items
+                  200 Menu Items
                 </li>
                 <li className="flex gap-x-3">
                   <CheckCircle className="h-5 w-4 flex-none text-green-500" />

@@ -74,8 +74,8 @@ export function SubscriptionStatus({
     return <Badge variant="outline">{status}</Badge>;
   };
 
-  const getUsagePercentage = (current: number, limit: number) => {
-    if (limit === -1) return 0; // Unlimited
+  const getUsagePercentage = (current: number | undefined, limit: number | undefined) => {
+    if (!current || !limit || limit === -1) return 0; // Unlimited or undefined
     return Math.min((current / limit) * 100, 100);
   };
 
@@ -175,14 +175,14 @@ export function SubscriptionStatus({
                 <div className="flex items-center justify-between text-sm">
                   <span className="font-medium">Restaurants</span>
                   <span className="text-muted-foreground">
-                    {usageStats.restaurants.currentUsage} / {
-                      usageStats.restaurants.limit === -1 
+                    {usageStats.restaurants.currentUsage ?? 0} / {
+                      (!usageStats.restaurants.limit || usageStats.restaurants.limit === -1)
                         ? 'Unlimited' 
                         : usageStats.restaurants.limit
                     }
                   </span>
                 </div>
-                {usageStats.restaurants.limit !== -1 && (
+                {usageStats.restaurants.limit && usageStats.restaurants.limit !== -1 && (
                   <Progress 
                     value={getUsagePercentage(usageStats.restaurants.currentUsage, usageStats.restaurants.limit)}
                     className="h-2"
@@ -195,14 +195,14 @@ export function SubscriptionStatus({
                 <div className="flex items-center justify-between text-sm">
                   <span className="font-medium">Products</span>
                   <span className="text-muted-foreground">
-                    {usageStats.products.currentUsage} / {
-                      usageStats.products.limit === -1 
+                    {usageStats.products.currentUsage ?? 0} / {
+                      (!usageStats.products.limit || usageStats.products.limit === -1)
                         ? 'Unlimited' 
                         : usageStats.products.limit
                     }
                   </span>
                 </div>
-                {usageStats.products.limit !== -1 && (
+                {usageStats.products.limit && usageStats.products.limit !== -1 && (
                   <Progress 
                     value={getUsagePercentage(usageStats.products.currentUsage, usageStats.products.limit)}
                     className="h-2"
@@ -215,14 +215,14 @@ export function SubscriptionStatus({
                 <div className="flex items-center justify-between text-sm">
                   <span className="font-medium">API Calls</span>
                   <span className="text-muted-foreground">
-                    {usageStats.apiCalls.currentUsage.toLocaleString()} / {
-                      usageStats.apiCalls.limit === -1 
+                    {(usageStats.apiCalls.currentUsage ?? 0).toLocaleString()} / {
+                      (!usageStats.apiCalls.limit || usageStats.apiCalls.limit === -1)
                         ? 'Unlimited' 
                         : usageStats.apiCalls.limit.toLocaleString()
                     }
                   </span>
                 </div>
-                {usageStats.apiCalls.limit !== -1 && (
+                {usageStats.apiCalls.limit && usageStats.apiCalls.limit !== -1 && (
                   <Progress 
                     value={getUsagePercentage(usageStats.apiCalls.currentUsage, usageStats.apiCalls.limit)}
                     className="h-2"

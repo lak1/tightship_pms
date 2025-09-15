@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { createTRPCRouter, organizationProcedure } from '../trpc'
+import { createTRPCRouter, organizationProcedure, subscriptionProcedure } from '../trpc'
 
 export const restaurantRouter = createTRPCRouter({
   list: organizationProcedure.query(async ({ ctx }) => {
@@ -78,7 +78,13 @@ export const restaurantRouter = createTRPCRouter({
       return restaurant
     }),
 
-  create: organizationProcedure
+  create: subscriptionProcedure({
+      requireLimit: {
+        type: 'restaurants',
+        amount: 1
+      },
+      allowTrial: true
+    })
     .input(
       z.object({
         name: z.string().min(1),
@@ -95,7 +101,7 @@ export const restaurantRouter = createTRPCRouter({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const restaurant = await ctx.db.restaurant.create({
+      const restaurant = await ctx.db.restaurants.create({
         data: {
           ...input,
           organizationId: ctx.session.user.organizationId,
@@ -104,7 +110,7 @@ export const restaurantRouter = createTRPCRouter({
       })
 
       // Create default menu
-      await ctx.db.menu.create({
+      await ctx.db.menus.create({
         data: {
           name: 'Main Menu',
           restaurantId: restaurant.id,
@@ -136,7 +142,7 @@ export const restaurantRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const { id, ...data } = input
 
-      const restaurant = await ctx.db.restaurant.updateMany({
+      const restaurant = await ctx.db.restaurants.updateMany({
         where: {
           id,
           organizationId: ctx.session.user.organizationId,
