@@ -250,9 +250,14 @@ model products {
   taxRateId               String?
   priceControl            PriceControl              @default(MANUAL)
   priceFormula            String?
+  isComposite             Boolean                   @default(false)
+  customPrice             Decimal?                  @db.Decimal(10, 4)
   isActive                Boolean                   @default(true)
+  canBeModifier           Boolean                   @default(false)
+  showOnMenu              Boolean                   @default(true)
   availability            Json                      @default("{}")
   nutritionInfo           Json?                     @default("{}")
+  ingredients             String[]                  @default([])
   allergens               String[]                  @default([])
   dietaryInfo             String[]                  @default([])
   createdAt               DateTime                  @default(now())
@@ -265,6 +270,14 @@ model products {
   categories              categories?               @relation(fields: [categoryId], references: [id])
   menus                   menus                     @relation(fields: [menuId], references: [id], onDelete: Cascade)
   tax_rates               tax_rates?                @relation(fields: [taxRateId], references: [id])
+  
+  // Composite product relationships
+  composite_components    composite_components[]    @relation("CompositeProduct")
+  component_of            composite_components[]    @relation("ComponentProduct")
+  
+  // Simple modifier relationships
+  available_modifiers     product_simple_modifiers[] @relation("ProductModifiers")
+  modifier_for_products   product_simple_modifiers[] @relation("ModifierProduct")
 
   @@index([menuId], map: "idx_products_menuid")
 }
@@ -596,4 +609,47 @@ model audit_logs {
   metadata   Json        @default("{}")
   timestamp  DateTime    @default(now())
   createdAt  DateTime    @default(now())
+}
+
+/// Composite products - products made up of multiple existing products
+/// Example: "Cod & Chips" made from "Cod" + "Chips" products
+model composite_components {
+  id              String   @id
+  compositeId     String   // The composite product (e.g., "Cod & Chips")
+  componentId     String   // The component product (e.g., "Cod")
+  quantity        Int      @default(1)
+  customPrice     Decimal? @db.Decimal(10, 4) // Override component price if needed
+  displayOrder    Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  // Relations
+  composite_product products @relation("CompositeProduct", fields: [compositeId], references: [id], onDelete: Cascade)
+  component_product products @relation("ComponentProduct", fields: [componentId], references: [id], onDelete: Cascade)
+  
+  @@unique([compositeId, componentId])
+  @@index([compositeId])
+  @@index([componentId])
+}
+
+/// Simple modifiers - existing products that can be added to other products
+/// Example: "Vinegar" or "Curry Sauce" can be modifiers for "Chips"
+model product_simple_modifiers {
+  id            String   @id
+  productId     String   // The main product (e.g., "Chips")
+  modifierId    String   // The modifier product (e.g., "Vinegar")
+  priceChange   Decimal  @default(0) @db.Decimal(10, 4) // +0.50, -0.25, 0.00 (kept for backward compatibility)
+  modifierPrice Decimal? @db.Decimal(10, 4) // Custom price for this modifier relationship (overrides default)
+  isActive      Boolean  @default(true)
+  displayOrder  Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  // Relations
+  product  products @relation("ProductModifiers", fields: [productId], references: [id], onDelete: Cascade)
+  modifier products @relation("ModifierProduct", fields: [modifierId], references: [id], onDelete: Cascade)
+  
+  @@unique([productId, modifierId])
+  @@index([productId])
+  @@index([modifierId])
 }

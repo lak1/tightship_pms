@@ -11,6 +11,27 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import DashboardLayout from '@/components/layout/dashboard-layout'
+import { STANDARD_ALLERGENS } from '@/lib/constants/allergens'
+import { NUTRITION_FIELDS } from '@/lib/types/nutrition'
+import SearchableSelect from '@/components/ui/searchable-select'
+
+const nutritionalInfoSchema = z.object({
+  calories: z.number().optional(),
+  protein: z.number().optional(),
+  carbohydrates: z.number().optional(),
+  fat: z.number().optional(),
+  saturatedFat: z.number().optional(),
+  sugar: z.number().optional(),
+  fiber: z.number().optional(),
+  sodium: z.number().optional(),
+  cholesterol: z.number().optional(),
+  calcium: z.number().optional(),
+  iron: z.number().optional(),
+  vitaminC: z.number().optional(),
+  vitaminA: z.number().optional(),
+  servingSize: z.string().optional(),
+  servingUnit: z.string().optional(),
+}).optional()
 
 const productSchema = z.object({
   name: z.string().min(1, 'Product name is required'),
@@ -21,32 +42,30 @@ const productSchema = z.object({
   taxRateId: z.string().optional(),
   sku: z.string().optional(),
   barcode: z.string().optional(),
+  ingredients: z.array(z.string()).default([]),
+  allergens: z.array(z.string()).default([]),
+  dietaryInfo: z.array(z.string()).default([]),
+  nutritionInfo: nutritionalInfoSchema,
+  canBeModifier: z.boolean().default(false),
+  showOnMenu: z.boolean().default(true),
 })
 
 type ProductFormData = z.infer<typeof productSchema>
-
-const ALLERGENS = [
-  'Gluten', 'Dairy', 'Eggs', 'Fish', 'Shellfish', 'Tree nuts', 'Peanuts', 
-  'Soy', 'Sesame', 'Sulphites', 'Celery', 'Mustard', 'Lupin'
-]
-
-const DIETARY_INFO = [
-  'Vegetarian', 'Vegan', 'Gluten-free', 'Dairy-free', 'Low-carb', 
-  'Keto', 'Halal', 'Kosher', 'Organic'
-]
 
 export default function ProductDetailPage() {
   const params = useParams()
   const productId = params.id as string
   const { data: session, status } = useSession()
-  // const router = useRouter() // Not needed for current functionality
-  // Always in edit mode - no longer need state for this
+  const [ingredients, setIngredients] = useState<string[]>([])
   const [selectedAllergens, setSelectedAllergens] = useState<string[]>([])
   const [selectedDietaryInfo, setSelectedDietaryInfo] = useState<string[]>([])
+  const [nutritionInfo, setNutritionInfo] = useState<any>({})
   const [priceEditMode, setPriceEditMode] = useState<'base' | 'display'>('base')
   const [maintainPrice, setMaintainPrice] = useState<'base' | 'display'>('display')
+  const [modifierPriceDisplay, setModifierPriceDisplay] = useState<'base' | 'display'>('base')
   const [showNewCategory, setShowNewCategory] = useState(false)
   const [newCategoryName, setNewCategoryName] = useState('')
+  const [bundlePricingMode, setBundlePricingMode] = useState<'bundle' | 'custom'>('bundle')
 
   const { data: product, isLoading } = trpc.product.getById.useQuery(
     { id: productId },
@@ -61,6 +80,28 @@ export default function ProductDetailPage() {
   const { data: categories, refetch: refetchCategories } = trpc.product.getCategories.useQuery(
     { menuId: product?.menuId || '' },
     { enabled: !!product?.menuId }
+  )
+
+  const { data: constants } = trpc.product.getConstants.useQuery()
+
+  // Composite and modifier queries
+  const { data: compositeComponents } = trpc.product.getCompositeComponents.useQuery(
+    { productId },
+    { enabled: !!product?.isComposite }
+  )
+
+  const { data: availableModifiers } = trpc.product.getProductModifiers.useQuery(
+    { productId },
+    { enabled: !!productId }
+  )
+
+  // Get all products for modifier selection
+  const { data: allProducts } = trpc.product.list.useQuery(
+    { 
+      restaurantId: product?.menus?.restaurants?.id || '',
+      limit: 1000 // Get all products for dropdown
+    },
+    { enabled: !!product?.menus?.restaurants?.id }
   )
 
   const createCategoryMutation = trpc.product.createCategory.useMutation({
@@ -79,6 +120,31 @@ export default function ProductDetailPage() {
     onError: (error) => {
       console.error('Error updating product:', error)
       alert('Failed to update product. Please try again.')
+    }
+  })
+
+  const addModifierMutation = trpc.product.addModifier.useMutation({
+    onSuccess: () => {
+      utils.product.getProductModifiers.invalidate({ productId })
+    }
+  })
+
+  const removeModifierMutation = trpc.product.removeModifier.useMutation({
+    onSuccess: () => {
+      utils.product.getProductModifiers.invalidate({ productId })
+    }
+  })
+
+  const updateModifierMutation = trpc.product.updateModifier.useMutation({
+    onSuccess: () => {
+      utils.product.getProductModifiers.invalidate({ productId })
+    }
+  })
+
+  const updateComponentQuantityMutation = trpc.product.updateComponentQuantity.useMutation({
+    onSuccess: () => {
+      utils.product.getCompositeComponents.invalidate({ productId })
+      utils.product.getById.invalidate({ id: productId })
     }
   })
 
@@ -158,9 +224,22 @@ export default function ProductDetailPage() {
         taxRateId: taxRateIdToUse,
         sku: product.sku || '',
         barcode: product.barcode || '',
+        ingredients: product.ingredients || [],
+        allergens: product.allergens || [],
+        dietaryInfo: product.dietaryInfo || [],
+        nutritionInfo: product.nutritionInfo || {},
+        canBeModifier: product.canBeModifier || false,
+        showOnMenu: product.showOnMenu ?? true, // Use ?? to handle null/undefined, default to true
       })
-      setSelectedAllergens(product.allergens)
-      setSelectedDietaryInfo(product.dietaryInfo)
+      setIngredients(product.ingredients || [])
+      setSelectedAllergens(product.allergens || [])
+      setSelectedDietaryInfo(product.dietaryInfo || [])
+      setNutritionInfo(product.nutritionInfo || {})
+      
+      // Set bundle pricing mode based on whether product has custom price
+      if (product.isComposite) {
+        setBundlePricingMode(product.customPrice ? 'custom' : 'bundle')
+      }
     }
   }, [product, reset, taxRates])
 
@@ -194,18 +273,39 @@ export default function ProductDetailPage() {
   }, [watchedTaxRateId, maintainPrice, watchedBasePrice, watchedDisplayPrice, taxRates, setValue])
 
   const onSubmit = async (data: ProductFormData) => {
-    await updateProductMutation.mutateAsync({
+    const updateData: any = {
       id: productId,
       name: data.name,
       description: data.description,
       categoryId: data.categoryId,
-      basePrice: data.basePrice,
       taxRateId: data.taxRateId,
       sku: data.sku,
       barcode: data.barcode,
+      ingredients,
       allergens: selectedAllergens,
       dietaryInfo: selectedDietaryInfo,
-    })
+      nutritionInfo: Object.keys(nutritionInfo).length > 0 ? nutritionInfo : undefined,
+      canBeModifier: data.canBeModifier,
+      showOnMenu: data.showOnMenu,
+    }
+
+    // Handle pricing based on product type and mode
+    if (product?.isComposite) {
+      if (bundlePricingMode === 'custom') {
+        // Set custom price and base price
+        updateData.customPrice = data.basePrice
+        updateData.basePrice = data.basePrice
+      } else {
+        // Clear custom price to use bundle calculation
+        updateData.customPrice = null
+        // Don't set basePrice - let the backend calculate it from components
+      }
+    } else {
+      // Regular product - just set base price
+      updateData.basePrice = data.basePrice
+    }
+
+    await updateProductMutation.mutateAsync(updateData)
   }
 
   const handleCreateCategory = async () => {
@@ -382,31 +482,59 @@ export default function ProductDetailPage() {
                     <div className="border border-gray-200 rounded-lg p-4">
                       <div className="flex items-center justify-between mb-4">
                         <h3 className="text-sm font-medium text-gray-900">Pricing</h3>
-                        <div className="flex items-center gap-2 text-xs">
-                          <span className="text-gray-500">Edit by:</span>
-                          <button
-                            type="button"
-                            onClick={() => setPriceEditMode('base')}
-                            className={`px-2 py-1 rounded ${
-                              priceEditMode === 'base'
-                                ? 'bg-blue-100 text-blue-700'
-                                : 'bg-gray-100 text-gray-600'
-                            }`}
-                          >
-                            Base Price
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setPriceEditMode('display')}
-                            className={`px-2 py-1 rounded ${
-                              priceEditMode === 'display'
-                                ? 'bg-blue-100 text-blue-700'
-                                : 'bg-gray-100 text-gray-600'
-                            }`}
-                          >
-                            Display Price
-                          </button>
-                        </div>
+                        {product?.isComposite ? (
+                          <div className="flex items-center gap-2 text-xs">
+                            <span className="text-gray-500">Pricing mode:</span>
+                            <button
+                              type="button"
+                              onClick={() => setBundlePricingMode('bundle')}
+                              className={`px-2 py-1 rounded ${
+                                bundlePricingMode === 'bundle'
+                                  ? 'bg-green-100 text-green-700'
+                                  : 'bg-gray-100 text-gray-600'
+                              }`}
+                            >
+                              Bundle Price
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setBundlePricingMode('custom')}
+                              className={`px-2 py-1 rounded ${
+                                bundlePricingMode === 'custom'
+                                  ? 'bg-green-100 text-green-700'
+                                  : 'bg-gray-100 text-gray-600'
+                              }`}
+                            >
+                              Custom Price
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2 text-xs">
+                            <span className="text-gray-500">Edit by:</span>
+                            <button
+                              type="button"
+                              onClick={() => setPriceEditMode('base')}
+                              className={`px-2 py-1 rounded ${
+                                priceEditMode === 'base'
+                                  ? 'bg-blue-100 text-blue-700'
+                                  : 'bg-gray-100 text-gray-600'
+                              }`}
+                            >
+                              Base Price
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setPriceEditMode('display')}
+                              className={`px-2 py-1 rounded ${
+                                priceEditMode === 'display'
+                                  ? 'bg-blue-100 text-blue-700'
+                                  : 'bg-gray-100 text-gray-600'
+                              }`}
+                            >
+                              Display Price
+                            </button>
+                          </div>
+                        )}
                       </div>
 
                       {/* Tax Rate Selection */}
@@ -456,45 +584,83 @@ export default function ProductDetailPage() {
                         )}
                       </div>
 
-                      {/* Price Inputs */}
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* Price Inputs - Only show for non-composite or custom pricing mode */}
+                      {(!product?.isComposite || bundlePricingMode === 'custom') && (
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Base Price (Ex. TAX) *
-                          </label>
-                          <input
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            disabled={priceEditMode === 'display'}
-                            {...register('basePrice', { valueAsNumber: true })}
-                            className={`w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                              priceEditMode === 'display' ? 'bg-gray-50 text-gray-500' : ''
-                            }`}
-                          />
-                          {errors.basePrice && (
-                            <p className="mt-1 text-sm text-red-600">{errors.basePrice.message}</p>
+                          {product?.isComposite && bundlePricingMode === 'custom' && (
+                            <div className="mb-3 p-2 bg-yellow-50 border border-yellow-200 rounded text-sm text-yellow-700">
+                              <strong>Custom Pricing:</strong> Setting custom prices will override the calculated bundle price.
+                            </div>
                           )}
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Display Price (Inc. TAX)
-                          </label>
-                          <input
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            disabled={priceEditMode === 'base'}
-                            {...register('displayPrice', { valueAsNumber: true })}
-                            className={`w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                              priceEditMode === 'base' ? 'bg-gray-50 text-gray-500' : ''
-                            }`}
-                          />
-                          {errors.displayPrice && (
-                            <p className="mt-1 text-sm text-red-600">{errors.displayPrice.message}</p>
+                          
+                          {!product?.isComposite && (
+                            <div className="flex items-center gap-2 text-xs mb-3">
+                              <span className="text-gray-500">Edit by:</span>
+                              <button
+                                type="button"
+                                onClick={() => setPriceEditMode('base')}
+                                className={`px-2 py-1 rounded ${
+                                  priceEditMode === 'base'
+                                    ? 'bg-blue-100 text-blue-700'
+                                    : 'bg-gray-100 text-gray-600'
+                                }`}
+                              >
+                                Base Price
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setPriceEditMode('display')}
+                                className={`px-2 py-1 rounded ${
+                                  priceEditMode === 'display'
+                                    ? 'bg-blue-100 text-blue-700'
+                                    : 'bg-gray-100 text-gray-600'
+                                }`}
+                              >
+                                Display Price
+                              </button>
+                            </div>
                           )}
+                          
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-2">
+                                Base Price (Ex. TAX) *
+                              </label>
+                              <input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                disabled={!product?.isComposite && priceEditMode === 'display'}
+                                {...register('basePrice', { valueAsNumber: true })}
+                                className={`w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                                  !product?.isComposite && priceEditMode === 'display' ? 'bg-gray-50 text-gray-500' : ''
+                                }`}
+                              />
+                              {errors.basePrice && (
+                                <p className="mt-1 text-sm text-red-600">{errors.basePrice.message}</p>
+                              )}
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-2">
+                                Display Price (Inc. TAX)
+                              </label>
+                              <input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                disabled={!product?.isComposite && priceEditMode === 'base'}
+                                {...register('displayPrice', { valueAsNumber: true })}
+                                className={`w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                                  !product?.isComposite && priceEditMode === 'base' ? 'bg-gray-50 text-gray-500' : ''
+                                }`}
+                              />
+                              {errors.displayPrice && (
+                                <p className="mt-1 text-sm text-red-600">{errors.displayPrice.message}</p>
+                              )}
+                            </div>
+                          </div>
                         </div>
-                      </div>
+                      )}
 
                       {/* Price Summary */}
                       {selectedTaxRate && (
@@ -505,6 +671,280 @@ export default function ProductDetailPage() {
                           </div>
                         </div>
                       )}
+                    </div>
+
+                    {/* Bundle Price Display for Bundle Mode */}
+                    {product?.isComposite && bundlePricingMode === 'bundle' && (
+                      <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-md">
+                        <h4 className="text-sm font-medium text-green-900 mb-2">Calculated Bundle Price</h4>
+                        {compositeComponents && (
+                          <div className="grid grid-cols-2 gap-4 text-sm">
+                            <div className="flex justify-between">
+                              <span className="text-green-700">Base Price (Ex. Tax):</span>
+                              <span className="font-semibold text-green-900">
+                                £{compositeComponents.reduce((total, comp) => 
+                                  total + (Number(comp.customPrice || comp.component_product.basePrice) * comp.quantity), 0
+                                ).toFixed(2)}
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-green-700">Display Price (Inc. Tax):</span>
+                              <span className="font-semibold text-green-900">
+                                £{compositeComponents.reduce((total, comp) => {
+                                  const basePrice = Number(comp.customPrice || comp.component_product.basePrice)
+                                  const displayPrice = selectedTaxRate 
+                                    ? calculateDisplayPrice(basePrice, selectedTaxRate)
+                                    : basePrice
+                                  return total + (displayPrice * comp.quantity)
+                                }, 0).toFixed(2)}
+                              </span>
+                            </div>
+                          </div>
+                        )}
+                        <p className="text-xs text-green-600 mt-2">
+                          This price is automatically calculated from the bundle components below.
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Bundle Components - Show if this is a composite product */}
+                    {product?.isComposite && (
+                      <div className="border border-gray-200 rounded-lg p-4 mt-6">
+                        <h3 className="text-sm font-medium text-gray-900 mb-4">Bundle Components</h3>
+                        {compositeComponents && compositeComponents.length > 0 ? (
+                          <div className="space-y-3">
+                            {compositeComponents.map((component) => {
+                              const basePrice = Number(component.customPrice || component.component_product.basePrice)
+                              const displayPrice = selectedTaxRate 
+                                ? calculateDisplayPrice(basePrice, selectedTaxRate)
+                                : basePrice
+                              
+                              return (
+                                <div key={component.id} className="flex items-center justify-between p-3 border border-gray-200 rounded-md bg-gray-50">
+                                  <div className="flex-1">
+                                    <div className="font-medium text-gray-900">
+                                      {component.component_product.name}
+                                    </div>
+                                    <div className="text-sm text-gray-500">
+                                      Base: £{basePrice.toFixed(2)} | Display: £{displayPrice.toFixed(2)}
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-3">
+                                    <div className="flex items-center gap-2">
+                                      <label className="text-xs text-gray-500">Qty:</label>
+                                      <input
+                                        type="number"
+                                        min="1"
+                                        value={component.quantity}
+                                        onChange={(e) => {
+                                          const newQuantity = parseInt(e.target.value) || 1
+                                          updateComponentQuantityMutation.mutate({
+                                            compositeId: productId,
+                                            componentId: component.componentId,
+                                            quantity: newQuantity
+                                          })
+                                        }}
+                                        className="w-16 border border-gray-300 rounded px-2 py-1 text-sm"
+                                      />
+                                    </div>
+                                    <div className="text-right">
+                                      <div className="font-medium text-gray-900">
+                                        £{(displayPrice * component.quantity).toFixed(2)}
+                                      </div>
+                                      <div className="text-xs text-gray-500">
+                                        (inc. tax)
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              )
+                            })}
+                            <div className="border-t pt-3 mt-3 bg-blue-50 rounded p-3">
+                              <div className="grid grid-cols-2 gap-4 text-sm">
+                                <div className="flex justify-between">
+                                  <span className="font-medium text-gray-700">Bundle Base Total:</span>
+                                  <span className="font-semibold text-gray-900">
+                                    £{compositeComponents.reduce((total, comp) => 
+                                      total + (Number(comp.customPrice || comp.component_product.basePrice) * comp.quantity), 0
+                                    ).toFixed(2)}
+                                  </span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="font-medium text-gray-700">Bundle Display Total:</span>
+                                  <span className="font-semibold text-gray-900">
+                                    £{compositeComponents.reduce((total, comp) => {
+                                      const basePrice = Number(comp.customPrice || comp.component_product.basePrice)
+                                      const displayPrice = selectedTaxRate 
+                                        ? calculateDisplayPrice(basePrice, selectedTaxRate)
+                                        : basePrice
+                                      return total + (displayPrice * comp.quantity)
+                                    }, 0).toFixed(2)}
+                                  </span>
+                                </div>
+                              </div>
+                              <div className="mt-2 text-xs text-gray-500">
+                                This bundle's pricing is calculated from its components. Individual base/display prices above may differ from component totals if custom bundle pricing is set.
+                              </div>
+                            </div>
+                          </div>
+                        ) : (
+                          <p className="text-gray-500 text-sm">No components configured</p>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Available Modifiers */}
+                    <div className="border border-gray-200 rounded-lg p-4 mt-6">
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-sm font-medium text-gray-900">Available Modifiers</h3>
+                        <div className="flex items-center gap-2 text-xs">
+                          <span className="text-gray-500">Show prices:</span>
+                          <button
+                            type="button"
+                            onClick={() => setModifierPriceDisplay('base')}
+                            className={`px-2 py-1 rounded ${
+                              modifierPriceDisplay === 'base' 
+                                ? 'bg-blue-100 text-blue-700' 
+                                : 'text-gray-500 hover:text-gray-700'
+                            }`}
+                          >
+                            Exc. Tax
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setModifierPriceDisplay('display')}
+                            className={`px-2 py-1 rounded ${
+                              modifierPriceDisplay === 'display' 
+                                ? 'bg-blue-100 text-blue-700' 
+                                : 'text-gray-500 hover:text-gray-700'
+                            }`}
+                          >
+                            Inc. Tax
+                          </button>
+                        </div>
+                      </div>
+                      
+                      {/* Current Modifiers */}
+                      {availableModifiers && availableModifiers.length > 0 ? (
+                        <div className="space-y-3 mb-4">
+                          {availableModifiers.map((modifier) => {
+                            // Calculate the effective price: custom price if set, otherwise product's base price
+                            const basePrice = roundToTwoDecimals(modifier.modifierPrice 
+                              ? Number(modifier.modifierPrice)
+                              : Number(modifier.modifier.basePrice))
+                            
+                            // Calculate display price with tax
+                            const displayPrice = selectedTaxRate 
+                              ? roundToTwoDecimals(calculateDisplayPrice(basePrice, selectedTaxRate))
+                              : basePrice
+                            
+                            const showPrice = modifierPriceDisplay === 'base' ? basePrice : displayPrice
+                            
+                            return (
+                              <div key={modifier.id} className="flex items-center justify-between p-3 border border-gray-200 rounded-md bg-gray-50">
+                                <div className="flex-1">
+                                  <div className="font-medium text-gray-900">
+                                    {modifier.modifier.name}
+                                  </div>
+                                  <div className="text-sm text-gray-500">
+                                    Price ({modifierPriceDisplay === 'base' ? 'Ex. Tax' : 'Inc. Tax'}): £{showPrice.toFixed(2)}
+                                    {modifier.modifierPrice && (
+                                      <span className="ml-1 text-blue-600">(custom)</span>
+                                    )}
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    value={modifierPriceDisplay === 'base' ? basePrice : displayPrice}
+                                    onChange={(e) => {
+                                      const inputPrice = parseFloat(e.target.value) || 0
+                                      let newBasePrice = inputPrice
+                                      
+                                      // If editing display price, convert back to base price
+                                      if (modifierPriceDisplay === 'display' && selectedTaxRate) {
+                                        newBasePrice = calculateBasePrice(inputPrice, selectedTaxRate)
+                                      }
+                                      
+                                      // Round to 2 decimal places
+                                      newBasePrice = roundToTwoDecimals(newBasePrice)
+                                      
+                                      updateModifierMutation.mutate({
+                                        productId,
+                                        modifierId: modifier.modifier.id,
+                                        modifierPrice: newBasePrice
+                                      })
+                                    }}
+                                    className="w-20 border border-gray-300 rounded px-2 py-1 text-sm"
+                                    placeholder="Price"
+                                  />
+                                  <span className="text-xs text-gray-500">{modifierPriceDisplay === 'base' ? 'exc' : 'inc'}</span>
+                                  <button
+                                    onClick={() => {
+                                      // Reset to product's base price
+                                      updateModifierMutation.mutate({
+                                        productId,
+                                        modifierId: modifier.modifier.id,
+                                        modifierPrice: Number(modifier.modifier.basePrice)
+                                      })
+                                    }}
+                                    className="text-blue-600 hover:text-blue-800 text-xs"
+                                    title="Reset to product's base price"
+                                  >
+                                    Reset
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      removeModifierMutation.mutate({
+                                        productId,
+                                        modifierId: modifier.modifier.id
+                                      })
+                                    }}
+                                    className="text-red-600 hover:text-red-800 text-sm"
+                                  >
+                                    Remove
+                                  </button>
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      ) : (
+                        <p className="text-gray-500 text-sm mb-4">No modifiers configured</p>
+                      )}
+
+                      {/* Add New Modifier */}
+                      <div className="border-t pt-4">
+                        <h4 className="text-sm font-medium text-gray-900 mb-3">Add Modifier</h4>
+                        <div className="space-y-2">
+                          <SearchableSelect
+                            options={Array.isArray(allProducts?.products) ? allProducts.products.filter(p => 
+                              p.id !== productId && // Don't allow self as modifier
+                              p.canBeModifier && // Only show products that can be modifiers
+                              !availableModifiers?.some(mod => mod.modifier.id === p.id) // Don't show already added modifiers
+                            ).map(p => ({
+                              value: p.id,
+                              label: p.name,
+                              subtitle: `£${Number(p.basePrice).toFixed(2)} (exc. tax)${p.sku ? ` • SKU: ${p.sku}` : ''}`
+                            })) : []}
+                            value=""
+                            onChange={(value) => {
+                              if (value) {
+                                addModifierMutation.mutate({
+                                  productId,
+                                  modifierId: value
+                                })
+                              }
+                            }}
+                            placeholder="Search products to add as modifier..."
+                            className="w-full"
+                          />
+                          <p className="text-xs text-gray-500">
+                            Search and select any existing product to enable it as a modifier for this item
+                          </p>
+                        </div>
+                      </div>
                     </div>
 
                     {/* SKU and Barcode */}
@@ -530,6 +970,30 @@ export default function ProductDetailPage() {
                         />
                       </div>
                     </div>
+
+                    {/* Modifier and Menu Display Options */}
+                    <div className="space-y-4">
+                      <div className="flex items-center">
+                        <input
+                          type="checkbox"
+                          {...register('canBeModifier')}
+                          className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        <label className="ml-2 text-sm text-gray-700">
+                          Can be used as a modifier (can be added to other products)
+                        </label>
+                      </div>
+                      <div className="flex items-center">
+                        <input
+                          type="checkbox"
+                          {...register('showOnMenu')}
+                          className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        <label className="ml-2 text-sm text-gray-700">
+                          Show on menu (visible to customers)
+                        </label>
+                      </div>
+                    </div>
                   </div>
 
                   <div className="mt-6 flex justify-end">
@@ -553,11 +1017,72 @@ export default function ProductDetailPage() {
                   </div>
                 </div>
 
+                {/* Ingredients */}
+                <div className="bg-white shadow rounded-lg p-6">
+                  <h2 className="text-lg font-medium text-gray-900 mb-6">Ingredients</h2>
+                  <div className="space-y-4">
+                    <div className="flex flex-wrap gap-2 mb-2">
+                      {ingredients.map((ingredient, index) => (
+                        <span
+                          key={index}
+                          className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800"
+                        >
+                          {ingredient}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIngredients(ingredients.filter((_, i) => i !== index))
+                            }}
+                            className="ml-2 text-blue-600 hover:text-blue-800"
+                          >
+                            ×
+                          </button>
+                        </span>
+                      ))}
+                      {ingredients.length === 0 && (
+                        <p className="text-gray-500 text-sm">No ingredients added yet</p>
+                      )}
+                    </div>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        placeholder="Add ingredient"
+                        className="flex-1 border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        onKeyPress={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault()
+                            const value = e.currentTarget.value.trim()
+                            if (value && !ingredients.includes(value)) {
+                              setIngredients([...ingredients, value])
+                              e.currentTarget.value = ''
+                            }
+                          }
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          const input = e.currentTarget.previousElementSibling as HTMLInputElement
+                          const value = input.value.trim()
+                          if (value && !ingredients.includes(value)) {
+                            setIngredients([...ingredients, value])
+                            input.value = ''
+                          }
+                        }}
+                        className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700"
+                      >
+                        Add
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+
                 {/* Allergens */}
                 <div className="bg-white shadow rounded-lg p-6">
                   <h2 className="text-lg font-medium text-gray-900 mb-6">Allergens</h2>
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                    {ALLERGENS.map((allergen) => (
+                    {constants?.allergens?.map((allergen) => (
                       <label key={allergen} className="flex items-center">
                         <input
                           type="checkbox"
@@ -581,7 +1106,7 @@ export default function ProductDetailPage() {
                 <div className="bg-white shadow rounded-lg p-6">
                   <h2 className="text-lg font-medium text-gray-900 mb-6">Dietary Information</h2>
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                    {DIETARY_INFO.map((info) => (
+                    {constants?.dietaryInfo?.map((info) => (
                       <label key={info} className="flex items-center">
                         <input
                           type="checkbox"
@@ -600,6 +1125,37 @@ export default function ProductDetailPage() {
                     ))}
                   </div>
                 </div>
+
+                {/* Nutritional Information */}
+                <div className="bg-white shadow rounded-lg p-6">
+                  <h2 className="text-lg font-medium text-gray-900 mb-6">Nutritional Information</h2>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {NUTRITION_FIELDS.map((field) => (
+                      <div key={field.key}>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          {field.label} {field.unit && `(${field.unit})`}
+                        </label>
+                        <input
+                          type="number"
+                          step="0.1"
+                          min="0"
+                          value={nutritionInfo[field.key] || ''}
+                          onChange={(e) => {
+                            const value = e.target.value
+                            setNutritionInfo(prev => ({
+                              ...prev,
+                              [field.key]: value ? parseFloat(value) : undefined
+                            }))
+                          }}
+                          className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          placeholder={field.placeholder}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+
               </form>
           </div>
 

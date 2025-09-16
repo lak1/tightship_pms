@@ -1,7 +1,26 @@
 import { z } from 'zod'
-import { createTRPCRouter, organizationProcedure, subscriptionProcedure } from '../trpc'
+import { createTRPCRouter, organizationProcedure, subscriptionProcedure, publicProcedure } from '../trpc'
 import { TRPCError } from '@trpc/server'
 import { transforms } from '@/lib/import-utils'
+import { STANDARD_ALLERGENS, COMMON_DIETARY_INFO } from '@/lib/constants/allergens'
+
+const nutritionalInfoSchema = z.object({
+  calories: z.number().optional(),
+  protein: z.number().optional(),
+  carbohydrates: z.number().optional(),
+  fat: z.number().optional(),
+  saturatedFat: z.number().optional(),
+  sugar: z.number().optional(),
+  fiber: z.number().optional(),
+  sodium: z.number().optional(),
+  cholesterol: z.number().optional(),
+  calcium: z.number().optional(),
+  iron: z.number().optional(),
+  vitaminC: z.number().optional(),
+  vitaminA: z.number().optional(),
+  servingSize: z.string().optional(),
+  servingUnit: z.string().optional(),
+}).optional()
 
 const createProductSchema = z.object({
   menuId: z.string(),
@@ -14,16 +33,28 @@ const createProductSchema = z.object({
   taxRateId: z.string().optional(),
   priceControl: z.enum(['MANUAL', 'FORMULA', 'MARKET']).default('MANUAL'),
   priceFormula: z.string().optional(),
+  ingredients: z.array(z.string()).default([]),
   allergens: z.array(z.string()).default([]),
   dietaryInfo: z.array(z.string()).default([]),
+  nutritionInfo: nutritionalInfoSchema,
+  canBeModifier: z.boolean().default(false),
+  showOnMenu: z.boolean().default(true),
 })
 
 const updateProductSchema = createProductSchema.partial().extend({
   id: z.string(),
   categoryId: z.string().nullable().optional(),
+  customPrice: z.number().nullable().optional(),
 })
 
 export const productRouter = createTRPCRouter({
+  getConstants: publicProcedure.query(() => {
+    return {
+      allergens: STANDARD_ALLERGENS,
+      dietaryInfo: COMMON_DIETARY_INFO,
+    }
+  }),
+
   getTaxRates: organizationProcedure
     .input(z.object({
       restaurantId: z.string().optional(),
@@ -265,14 +296,43 @@ export const productRouter = createTRPCRouter({
         })
       }
 
+      // Handle composite product pricing logic
+      const updateData: any = { ...data }
+      
+      // Convert basePrice to string if provided
+      if (data.basePrice !== undefined) {
+        updateData.basePrice = data.basePrice.toString()
+      }
+      
+      // Handle customPrice for composite products
+      if (data.customPrice !== undefined) {
+        updateData.customPrice = data.customPrice
+      }
+      
+      // If this is a composite product and customPrice is being cleared, recalculate from components
+      if (existingProduct.isComposite && data.customPrice === null) {
+        // Recalculate total from components
+        const components = await ctx.db.composite_components.findMany({
+          where: { compositeId: id },
+          include: {
+            component_product: {
+              select: { basePrice: true },
+            },
+          },
+        })
+        
+        let totalPrice = 0
+        for (const component of components) {
+          const componentPrice = component.customPrice || Number(component.component_product.basePrice)
+          totalPrice += componentPrice * component.quantity
+        }
+        
+        updateData.basePrice = totalPrice.toString()
+      }
+
       const product = await ctx.db.products.update({
         where: { id },
-        data: {
-          ...data,
-          ...(data.basePrice && {
-            basePrice: data.basePrice.toString(),
-          }),
-        },
+        data: updateData,
         include: {
           categories: true,
           tax_rates: true,
@@ -493,8 +553,10 @@ export const productRouter = createTRPCRouter({
             description: z.string().optional(),
             sku: z.string().optional(),
             barcode: z.string().optional(),
+            ingredients: z.array(z.string()).optional(),
             allergens: z.array(z.string()).optional(),
             dietaryInfo: z.array(z.string()).optional(),
+            nutritionInfo: nutritionalInfoSchema,
             active: z.boolean().optional(),
             deliverooPrice: z.number().optional(),
             uberPrice: z.number().optional(),
@@ -656,8 +718,10 @@ export const productRouter = createTRPCRouter({
             basePrice: (productData.basePrice || 0).toString(),
             sku: productData.sku,
             barcode: productData.barcode,
+            ingredients: productData.ingredients || [],
             allergens: productData.allergens || [],
             dietaryInfo: productData.dietaryInfo || [],
+            nutritionInfo: productData.nutritionInfo || null,
             isActive: productData.active !== false,
             taxRateId: productData.taxRateId || null,
             updatedAt: new Date(),
@@ -755,5 +819,321 @@ export const productRouter = createTRPCRouter({
       }
 
       return results
+    }),
+
+  // Composite Product Management
+  createComposite: organizationProcedure
+    .input(
+      z.object({
+        name: z.string().min(1),
+        description: z.string().optional(),
+        menuId: z.string(),
+        categoryId: z.string().optional(),
+        taxRateId: z.string().optional(),
+        components: z.array(
+          z.object({
+            productId: z.string(),
+            quantity: z.number().min(1).default(1),
+            customPrice: z.number().optional(), // Override component price
+          })
+        ),
+        customPrice: z.number().optional(), // Set custom total price instead of sum of components
+        sku: z.string().optional(),
+        barcode: z.string().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { name, description, menuId, categoryId, taxRateId, components, customPrice, sku, barcode } = input
+
+      // Calculate total price from components if no custom price set
+      let totalPrice = customPrice || 0
+      if (!customPrice) {
+        for (const component of components) {
+          const product = await ctx.db.products.findUnique({
+            where: { id: component.productId },
+            select: { basePrice: true }
+          })
+          if (product) {
+            const componentPrice = component.customPrice || Number(product.basePrice)
+            totalPrice += componentPrice * component.quantity
+          }
+        }
+      }
+
+      // Create the composite product
+      const compositeProduct = await ctx.db.products.create({
+        data: {
+          id: `composite_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          name,
+          description,
+          menuId,
+          categoryId,
+          taxRateId,
+          basePrice: totalPrice.toString(),
+          isComposite: true,
+          customPrice,
+          sku,
+          barcode,
+          updatedAt: new Date(),
+        },
+      })
+
+      // Create component relationships
+      for (const [index, component] of components.entries()) {
+        await ctx.db.composite_components.create({
+          data: {
+            id: `comp_${Date.now()}_${index}_${Math.random().toString(36).substr(2, 9)}`,
+            compositeId: compositeProduct.id,
+            componentId: component.productId,
+            quantity: component.quantity,
+            customPrice: component.customPrice,
+            displayOrder: index,
+          },
+        })
+      }
+
+      return compositeProduct
+    }),
+
+  getCompositeComponents: organizationProcedure
+    .input(z.object({ productId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const components = await ctx.db.composite_components.findMany({
+        where: { compositeId: input.productId },
+        include: {
+          component_product: {
+            select: {
+              id: true,
+              name: true,
+              basePrice: true,
+              sku: true,
+            },
+          },
+        },
+        orderBy: { displayOrder: 'asc' },
+      })
+
+      return components
+    }),
+
+  updateComposite: organizationProcedure
+    .input(
+      z.object({
+        id: z.string(),
+        name: z.string().optional(),
+        description: z.string().optional(),
+        categoryId: z.string().optional(),
+        taxRateId: z.string().optional(),
+        components: z.array(
+          z.object({
+            productId: z.string(),
+            quantity: z.number().min(1).default(1),
+            customPrice: z.number().optional(),
+          })
+        ).optional(),
+        customPrice: z.number().optional(),
+        sku: z.string().optional(),
+        barcode: z.string().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { id, components, customPrice, ...updateData } = input
+
+      // Update the composite product
+      let totalPrice = customPrice
+      if (components && !customPrice) {
+        // Recalculate total price from components
+        totalPrice = 0
+        for (const component of components) {
+          const product = await ctx.db.products.findUnique({
+            where: { id: component.productId },
+            select: { basePrice: true }
+          })
+          if (product) {
+            const componentPrice = component.customPrice || Number(product.basePrice)
+            totalPrice += componentPrice * component.quantity
+          }
+        }
+      }
+
+      const updatedProduct = await ctx.db.products.update({
+        where: { id },
+        data: {
+          ...updateData,
+          ...(totalPrice !== undefined && { basePrice: totalPrice }),
+          ...(customPrice !== undefined && { customPrice }),
+        },
+      })
+
+      // Update components if provided
+      if (components) {
+        // Delete existing components
+        await ctx.db.composite_components.deleteMany({
+          where: { compositeId: id },
+        })
+
+        // Create new components
+        for (const [index, component] of components.entries()) {
+          await ctx.db.composite_components.create({
+            data: {
+              id: `comp_${Date.now()}_${index}_${Math.random().toString(36).substr(2, 9)}`,
+              compositeId: id,
+              componentId: component.productId,
+              quantity: component.quantity,
+              customPrice: component.customPrice,
+              displayOrder: index,
+            },
+          })
+        }
+      }
+
+      return updatedProduct
+    }),
+
+  // Product Modifier Management
+  addModifier: organizationProcedure
+    .input(
+      z.object({
+        productId: z.string(),
+        modifierId: z.string(),
+        modifierPrice: z.number().optional(), // Optional custom price override
+        displayOrder: z.number().default(0),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { productId, modifierId, modifierPrice, displayOrder } = input
+
+      const modifier = await ctx.db.product_simple_modifiers.create({
+        data: {
+          id: `mod_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          productId,
+          modifierId,
+          priceChange: 0, // Keep for backward compatibility
+          modifierPrice: modifierPrice ? modifierPrice.toString() : null,
+          displayOrder,
+        },
+      })
+
+      return modifier
+    }),
+
+  getProductModifiers: organizationProcedure
+    .input(z.object({ productId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const modifiers = await ctx.db.product_simple_modifiers.findMany({
+        where: { productId: input.productId, isActive: true },
+        include: {
+          modifier: {
+            select: {
+              id: true,
+              name: true,
+              basePrice: true,
+              sku: true,
+            },
+          },
+        },
+        orderBy: { displayOrder: 'asc' },
+      })
+
+      return modifiers
+    }),
+
+  removeModifier: organizationProcedure
+    .input(
+      z.object({
+        productId: z.string(),
+        modifierId: z.string(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      await ctx.db.product_simple_modifiers.deleteMany({
+        where: {
+          productId: input.productId,
+          modifierId: input.modifierId,
+        },
+      })
+
+      return { success: true }
+    }),
+
+  updateModifier: organizationProcedure
+    .input(
+      z.object({
+        productId: z.string(),
+        modifierId: z.string(),
+        modifierPrice: z.number().optional(),
+        displayOrder: z.number().optional(),
+        isActive: z.boolean().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { productId, modifierId, modifierPrice, ...updateData } = input
+
+      const updatedModifier = await ctx.db.product_simple_modifiers.updateMany({
+        where: {
+          productId,
+          modifierId,
+        },
+        data: {
+          ...updateData,
+          modifierPrice: modifierPrice !== undefined ? modifierPrice.toString() : undefined,
+        },
+      })
+
+      return updatedModifier
+    }),
+
+  updateComponentQuantity: organizationProcedure
+    .input(
+      z.object({
+        compositeId: z.string(),
+        componentId: z.string(),
+        quantity: z.number().min(1),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { compositeId, componentId, quantity } = input
+
+      // Update the component quantity
+      const updatedComponent = await ctx.db.composite_components.updateMany({
+        where: {
+          compositeId,
+          componentId,
+        },
+        data: {
+          quantity,
+        },
+      })
+
+      // Recalculate total price if the composite doesn't have a custom price
+      const composite = await ctx.db.products.findUnique({
+        where: { id: compositeId },
+        select: { customPrice: true },
+      })
+
+      if (!composite?.customPrice) {
+        // Recalculate total from all components
+        const components = await ctx.db.composite_components.findMany({
+          where: { compositeId },
+          include: {
+            component_product: {
+              select: { basePrice: true },
+            },
+          },
+        })
+
+        let totalPrice = 0
+        for (const component of components) {
+          const componentPrice = component.customPrice || Number(component.component_product.basePrice)
+          totalPrice += componentPrice * component.quantity
+        }
+
+        await ctx.db.products.update({
+          where: { id: compositeId },
+          data: { basePrice: totalPrice.toString() },
+        })
+      }
+
+      return updatedComponent
     }),
 })
