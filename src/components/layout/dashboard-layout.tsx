@@ -13,7 +13,8 @@ import {
   Menu,
   X,
   Shield,
-  CreditCard
+  CreditCard,
+  AlertTriangle
 } from 'lucide-react'
 import { useState } from 'react'
 
@@ -26,6 +27,7 @@ interface DashboardLayoutProps {
 const navigation = [
   { name: 'Dashboard', href: '/', icon: Home },
   { name: 'Products', href: '/products', icon: Package },
+  { name: 'Allergen Matrix', href: '/allergen-matrix', icon: AlertTriangle },
   { name: 'Restaurants', href: '/restaurants', icon: Building2 },
   { name: 'Sync Status', href: '/sync', icon: RefreshCw },
   { name: 'Analytics', href: '/analytics', icon: BarChart3 },

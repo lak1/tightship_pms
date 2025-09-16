@@ -58,6 +58,7 @@ export default function ProductDetailPage() {
   const { data: session, status } = useSession()
   const [ingredients, setIngredients] = useState<string[]>([])
   const [selectedAllergens, setSelectedAllergens] = useState<string[]>([])
+  const [selectedMayContainAllergens, setSelectedMayContainAllergens] = useState<string[]>([])
   const [selectedDietaryInfo, setSelectedDietaryInfo] = useState<string[]>([])
   const [nutritionInfo, setNutritionInfo] = useState<any>({})
   const [priceEditMode, setPriceEditMode] = useState<'base' | 'display'>('base')
@@ -233,6 +234,7 @@ export default function ProductDetailPage() {
       })
       setIngredients(product.ingredients || [])
       setSelectedAllergens(product.allergens || [])
+      setSelectedMayContainAllergens(product.mayContainAllergens || [])
       setSelectedDietaryInfo(product.dietaryInfo || [])
       setNutritionInfo(product.nutritionInfo || {})
       
@@ -283,6 +285,7 @@ export default function ProductDetailPage() {
       barcode: data.barcode,
       ingredients,
       allergens: selectedAllergens,
+      mayContainAllergens: selectedMayContainAllergens,
       dietaryInfo: selectedDietaryInfo,
       nutritionInfo: Object.keys(nutritionInfo).length > 0 ? nutritionInfo : undefined,
       canBeModifier: data.canBeModifier,
@@ -995,26 +998,6 @@ export default function ProductDetailPage() {
                       </div>
                     </div>
                   </div>
-
-                  <div className="mt-6 flex justify-end">
-                    <button
-                      type="submit"
-                      disabled={isSubmitting}
-                      className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
-                    >
-                      {isSubmitting ? (
-                        <>
-                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                          Saving...
-                        </>
-                      ) : (
-                        <>
-                          <Save className="mr-2 h-4 w-4" />
-                          Save Changes
-                        </>
-                      )}
-                    </button>
-                  </div>
                 </div>
 
                 {/* Ingredients */}
@@ -1080,7 +1063,10 @@ export default function ProductDetailPage() {
 
                 {/* Allergens */}
                 <div className="bg-white shadow rounded-lg p-6">
-                  <h2 className="text-lg font-medium text-gray-900 mb-6">Allergens</h2>
+                  <h2 className="text-lg font-medium text-gray-900 mb-6">Allergens (Contains)</h2>
+                  <p className="text-sm text-gray-600 mb-4">
+                    Select allergens that are intentionally added as ingredients (legally required declaration)
+                  </p>
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                     {constants?.allergens?.map((allergen) => (
                       <label key={allergen} className="flex items-center">
@@ -1095,6 +1081,33 @@ export default function ProductDetailPage() {
                             }
                           }}
                           className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        <span className="ml-2 text-sm text-gray-700">{allergen}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                {/* May Contain Allergens */}
+                <div className="bg-white shadow rounded-lg p-6">
+                  <h2 className="text-lg font-medium text-gray-900 mb-6">May Contain Allergens</h2>
+                  <p className="text-sm text-gray-600 mb-4">
+                    Select allergens that may be present due to cross-contamination (precautionary labeling)
+                  </p>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                    {constants?.allergens?.map((allergen) => (
+                      <label key={allergen} className="flex items-center">
+                        <input
+                          type="checkbox"
+                          checked={selectedMayContainAllergens.includes(allergen)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedMayContainAllergens([...selectedMayContainAllergens, allergen])
+                            } else {
+                              setSelectedMayContainAllergens(selectedMayContainAllergens.filter(a => a !== allergen))
+                            }
+                          }}
+                          className="rounded border-gray-300 text-yellow-600 focus:ring-yellow-500"
                         />
                         <span className="ml-2 text-sm text-gray-700">{allergen}</span>
                       </label>
@@ -1155,6 +1168,28 @@ export default function ProductDetailPage() {
                   </div>
                 </div>
 
+                {/* Save Button Section */}
+                <div className="bg-white shadow rounded-lg p-6">
+                  <div className="flex justify-end">
+                    <button
+                      type="submit"
+                      disabled={isSubmitting}
+                      className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
+                    >
+                      {isSubmitting ? (
+                        <>
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                          Saving Product...
+                        </>
+                      ) : (
+                        <>
+                          <Save className="mr-2 h-4 w-4" />
+                          Save All Changes
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
 
               </form>
           </div>

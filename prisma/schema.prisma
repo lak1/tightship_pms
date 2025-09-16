@@ -259,6 +259,7 @@ model products {
   nutritionInfo           Json?                     @default("{}")
   ingredients             String[]                  @default([])
   allergens               String[]                  @default([])
+  mayContainAllergens     String[]                  @default([])
   dietaryInfo             String[]                  @default([])
   createdAt               DateTime                  @default(now())
   updatedAt               DateTime
