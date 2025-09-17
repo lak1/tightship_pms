@@ -3,10 +3,12 @@
 import Link from 'next/link'
 import { CheckCircle, Menu, X, ArrowRight, Star, Users, Zap, Shield } from 'lucide-react'
 import { useState } from 'react'
+import { useSession } from 'next-auth/react'
 import ContactForm from '@/components/ui/contact-form'
 
 export default function LandingPage() {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
+  const { data: session } = useSession()
 
   return (
     <div className="min-h-screen bg-white">
@@ -42,16 +44,30 @@ export default function LandingPage() {
           </div>
           
           <div className="hidden lg:flex lg:flex-1 lg:justify-end lg:gap-x-4 lg:items-center relative z-50">
-            <Link href="/auth/signin" className="text-sm font-semibold leading-6 text-gray-900 hover:text-teal-600 transition-colors cursor-pointer relative z-50">
-              Sign in
-            </Link>
-            <Link
-              href="#pricing"
-              className="rounded-md bg-teal-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-teal-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-600 transition-colors cursor-pointer relative z-50"
-            >
-              Get started
-            </Link>
-          </div>
+            {session ? (
+              <>
+                <span className="text-sm text-gray-600">Welcome back, {session.user?.name || session.user?.email?.split('@')[0]}</span>
+                <Link
+                  href="/dashboard"
+                  className="rounded-md bg-teal-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-teal-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-600 transition-colors cursor-pointer relative z-50"
+                >
+                  Go to Dashboard
+                </Link>
+              </>
+            ) : (
+              <>
+                <Link href="/auth/signin" className="text-sm font-semibold leading-6 text-gray-900 hover:text-teal-600 transition-colors cursor-pointer relative z-50">
+                  Sign in
+                </Link>
+                  <Link
+                    href="#pricing"
+                    className="rounded-md bg-teal-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-teal-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-600 transition-colors cursor-pointer relative z-50"
+                  >
+                    Get started
+                  </Link>
+                </>
+              )}
+            </div>
         </nav>
 
         {/* Mobile menu */}

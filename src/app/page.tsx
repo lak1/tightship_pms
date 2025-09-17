@@ -25,16 +25,33 @@ import { trpc } from '@/lib/trpc'
 export default function Home() {
   const { data: session, status } = useSession()
   const router = useRouter()
-  
+  const [showDashboard, setShowDashboard] = useState(false)
+
   // Fetch real data using tRPC
   const { data: dashboardStats, isLoading: statsLoading } = trpc.dashboard.getStats.useQuery(undefined, {
-    enabled: !!session
+    enabled: !!session && showDashboard
   })
   const { data: recentActivity, isLoading: activityLoading } = trpc.dashboard.getRecentActivity.useQuery(undefined, {
-    enabled: !!session
+    enabled: !!session && showDashboard
   })
 
-  // Remove automatic redirect - we'll show landing page instead
+  // Check if we should show dashboard based on URL or user preference
+  useEffect(() => {
+    // Show dashboard if:
+    // 1. On app subdomain (app.domain.com)
+    // 2. On localhost (development)
+    // 3. Explicitly navigated to /dashboard
+    // 4. URL has ?dashboard=true parameter
+    const url = new URL(window.location.href)
+    const isAppSubdomain = window.location.hostname.startsWith('app.')
+    const isLocalhost = window.location.hostname === 'localhost'
+    const hasDashboardParam = url.searchParams.get('dashboard') === 'true'
+    const isDashboardPath = window.location.pathname.startsWith('/dashboard')
+
+    if (session && (isAppSubdomain || isLocalhost || hasDashboardParam || isDashboardPath)) {
+      setShowDashboard(true)
+    }
+  }, [session])
 
   // Loading state - only show loading if we're checking authentication
   if (status === 'loading') {
@@ -45,8 +62,8 @@ export default function Home() {
     )
   }
 
-  // Loading state for authenticated users only
-  if (session && (statsLoading || activityLoading)) {
+  // Loading state for authenticated users only when showing dashboard
+  if (session && showDashboard && (statsLoading || activityLoading)) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600"></div>
@@ -54,8 +71,8 @@ export default function Home() {
     )
   }
 
-  // Not authenticated - show landing page
-  if (!session) {
+  // Show landing page for non-authenticated users OR when not on app subdomain
+  if (!session || !showDashboard) {
     return <LandingPage />
   }
 
