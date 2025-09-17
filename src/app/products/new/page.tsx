@@ -11,6 +11,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import DashboardLayout from '@/components/layout/dashboard-layout'
 import SearchableSelect from '@/components/ui/searchable-select'
+import { useSubscriptionErrorHandler } from '@/lib/utils/subscription-errors'
 
 const nutritionalInfoSchema = z.object({
   calories: z.number().optional(),
@@ -90,6 +91,7 @@ type ProductFormData = z.infer<typeof simpleProductSchema>
 export default function NewProductPage() {
   const { data: session, status } = useSession()
   const router = useRouter()
+  const { handleSubscriptionError } = useSubscriptionErrorHandler()
   const [ingredients, setIngredients] = useState<string[]>([])
   const [selectedAllergens, setSelectedAllergens] = useState<string[]>([])
   const [selectedDietaryInfo, setSelectedDietaryInfo] = useState<string[]>([])
@@ -196,7 +198,8 @@ export default function NewProductPage() {
     },
     onError: (error: any) => {
       console.error('Error creating product:', error)
-      alert('Failed to create product. Please try again.')
+      const handled = handleSubscriptionError(error, 'Failed to create product. Please try again.')
+      // If not a subscription error, the handler will show the fallback message
     }
   })
 
@@ -206,7 +209,8 @@ export default function NewProductPage() {
     },
     onError: (error: any) => {
       console.error('Error creating composite product:', error)
-      alert('Failed to create composite product. Please try again.')
+      const handled = handleSubscriptionError(error, 'Failed to create composite product. Please try again.')
+      // If not a subscription error, the handler will show the fallback message
     }
   })
 

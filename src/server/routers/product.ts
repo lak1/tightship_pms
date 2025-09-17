@@ -3,6 +3,7 @@ import { createTRPCRouter, organizationProcedure, subscriptionProcedure, publicP
 import { TRPCError } from '@trpc/server'
 import { transforms } from '@/lib/import-utils'
 import { STANDARD_ALLERGENS, COMMON_DIETARY_INFO } from '@/lib/constants/allergens'
+import { SubscriptionService } from '@/lib/subscriptions'
 
 const nutritionalInfoSchema = z.object({
   calories: z.number().optional(),
@@ -35,10 +36,17 @@ const createProductSchema = z.object({
   priceFormula: z.string().optional(),
   ingredients: z.array(z.string()).default([]),
   allergens: z.array(z.string()).default([]),
+  mayContainAllergens: z.array(z.string()).default([]),
   dietaryInfo: z.array(z.string()).default([]),
   nutritionInfo: nutritionalInfoSchema,
   canBeModifier: z.boolean().default(false),
   showOnMenu: z.boolean().default(true),
+  
+  // Variant fields
+  productType: z.enum(['STANDALONE', 'PARENT', 'VARIANT']).default('STANDALONE'),
+  parentProductId: z.string().optional(),
+  variantAttributes: z.record(z.string()).default({}),
+  variantDisplayOrder: z.number().default(0),
 })
 
 const updateProductSchema = createProductSchema.partial().extend({
@@ -202,6 +210,26 @@ export const productRouter = createTRPCRouter({
                 platforms: true,
               },
             },
+            // Include variant information
+            parentProduct: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+            variants: {
+              select: {
+                id: true,
+                name: true,
+                basePrice: true,
+                variantAttributes: true,
+                variantDisplayOrder: true,
+              },
+              orderBy: [
+                { variantDisplayOrder: 'asc' },
+                { name: 'asc' },
+              ],
+            },
           },
           orderBy: {
             name: 'asc',
@@ -245,13 +273,26 @@ export const productRouter = createTRPCRouter({
         })
       }
 
+      // Handle SKU - only include if not empty, otherwise let database handle null
+      const productData: any = {
+        ...input,
+        id: `product_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        basePrice: input.basePrice.toString(),
+        updatedAt: new Date(),
+      }
+      
+      // Only include SKU if it's not empty
+      if (!input.sku || input.sku.trim() === '') {
+        delete productData.sku
+      }
+      
+      // Only include barcode if it's not empty
+      if (!input.barcode || input.barcode.trim() === '') {
+        delete productData.barcode
+      }
+
       const product = await ctx.db.products.create({
-        data: {
-          ...input,
-          id: `product_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-          basePrice: input.basePrice.toString(),
-          updatedAt: new Date(),
-        },
+        data: productData,
         include: {
           categories: true,
           tax_rates: true,
@@ -307,6 +348,16 @@ export const productRouter = createTRPCRouter({
       // Handle customPrice for composite products
       if (data.customPrice !== undefined) {
         updateData.customPrice = data.customPrice
+      }
+      
+      // Handle SKU - only include if not empty, otherwise exclude to set null
+      if (!data.sku || data.sku.trim() === '') {
+        updateData.sku = null
+      }
+      
+      // Handle barcode - only include if not empty, otherwise exclude to set null
+      if (!data.barcode || data.barcode.trim() === '') {
+        updateData.barcode = null
       }
       
       // If this is a composite product and customPrice is being cleared, recalculate from components
@@ -822,7 +873,13 @@ export const productRouter = createTRPCRouter({
     }),
 
   // Composite Product Management
-  createComposite: organizationProcedure
+  createComposite: subscriptionProcedure({
+      requireLimit: {
+        type: 'products',
+        amount: 1
+      },
+      allowTrial: true
+    })
     .input(
       z.object({
         name: z.string().min(1),
@@ -861,21 +918,32 @@ export const productRouter = createTRPCRouter({
       }
 
       // Create the composite product
+      // Handle SKU and barcode for composite products
+      const compositeData: any = {
+        id: `composite_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        name,
+        description,
+        menuId,
+        categoryId,
+        taxRateId,
+        basePrice: totalPrice.toString(),
+        isComposite: true,
+        customPrice,
+        updatedAt: new Date(),
+      }
+      
+      // Only include SKU if not empty
+      if (sku && sku.trim() !== '') {
+        compositeData.sku = sku
+      }
+      
+      // Only include barcode if not empty
+      if (barcode && barcode.trim() !== '') {
+        compositeData.barcode = barcode
+      }
+
       const compositeProduct = await ctx.db.products.create({
-        data: {
-          id: `composite_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-          name,
-          description,
-          menuId,
-          categoryId,
-          taxRateId,
-          basePrice: totalPrice.toString(),
-          isComposite: true,
-          customPrice,
-          sku,
-          barcode,
-          updatedAt: new Date(),
-        },
+        data: compositeData,
       })
 
       // Create component relationships
@@ -1135,5 +1203,321 @@ export const productRouter = createTRPCRouter({
       }
 
       return updatedComponent
+    }),
+
+  // Product Variant Management
+  createVariant: subscriptionProcedure({
+      requireLimit: {
+        type: 'products',
+        amount: 1
+      },
+      allowTrial: true
+    })
+    .input(
+      z.object({
+        parentProductId: z.string(),
+        name: z.string(),
+        basePrice: z.number().min(0),
+        variantAttributes: z.record(z.string()).default({}), // { size: "Large", etc }
+        sku: z.string().optional(),
+        barcode: z.string().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { parentProductId, ...variantData } = input
+
+      // Verify parent product exists and belongs to organization
+      const parentProduct = await ctx.db.products.findFirst({
+        where: {
+          id: parentProductId,
+          menus: {
+            restaurants: {
+              organizationId: ctx.session.user.organizationId,
+            },
+          },
+        },
+        include: {
+          menus: true,
+        },
+      })
+
+      if (!parentProduct) {
+        throw new Error('Parent product not found')
+      }
+
+      // Check variant limits for this subscription plan
+      const variantLimitCheck = await SubscriptionService.checkVariantLimit(
+        ctx.session.user.organizationId,
+        parentProductId,
+        1
+      )
+
+      if (!variantLimitCheck.allowed) {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: variantLimitCheck.message || 'Variant limit exceeded for your subscription plan'
+        })
+      }
+
+      // Create variant product
+      // Handle SKU and barcode for variants
+      const variantPayload: any = {
+        id: `product_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        menuId: parentProduct.menuId,
+        categoryId: parentProduct.categoryId,
+        taxRateId: parentProduct.taxRateId,
+        name: variantData.name,
+        description: parentProduct.description,
+        images: parentProduct.images,
+        basePrice: variantData.basePrice.toString(),
+          
+        // Inherit from parent
+        ingredients: parentProduct.ingredients,
+        allergens: parentProduct.allergens,
+          mayContainAllergens: parentProduct.mayContainAllergens,
+        dietaryInfo: parentProduct.dietaryInfo,
+        nutritionInfo: parentProduct.nutritionInfo,
+        priceControl: parentProduct.priceControl,
+        priceFormula: parentProduct.priceFormula,
+        canBeModifier: parentProduct.canBeModifier,
+        showOnMenu: parentProduct.showOnMenu,
+        availability: parentProduct.availability,
+        
+        // Variant-specific
+        productType: 'VARIANT',
+        parentProductId: parentProductId,
+        variantAttributes: variantData.variantAttributes,
+        variantDisplayOrder: 0,
+        updatedAt: new Date(),
+      }
+      
+      // Only include SKU if not empty
+      if (variantData.sku && variantData.sku.trim() !== '') {
+        variantPayload.sku = variantData.sku
+      }
+      
+      // Only include barcode if not empty
+      if (variantData.barcode && variantData.barcode.trim() !== '') {
+        variantPayload.barcode = variantData.barcode
+      }
+
+      const variant = await ctx.db.products.create({
+        data: variantPayload,
+        include: {
+          categories: true,
+          tax_rates: true,
+          parentProduct: true,
+        },
+      })
+
+      // If this is the first variant, convert parent to PARENT type
+      const variantCount = await ctx.db.products.count({
+        where: { parentProductId: parentProductId },
+      })
+
+      if (variantCount === 1) {
+        await ctx.db.products.update({
+          where: { id: parentProductId },
+          data: { 
+            productType: 'PARENT',
+            showOnMenu: false, // Hide parent from menu, show variants instead
+          },
+        })
+      }
+
+      return variant
+    }),
+
+  listVariants: organizationProcedure
+    .input(
+      z.object({
+        parentProductId: z.string(),
+      })
+    )
+    .query(async ({ ctx, input }) => {
+      const variants = await ctx.db.products.findMany({
+        where: {
+          parentProductId: input.parentProductId,
+          menus: {
+            restaurants: {
+              organizationId: ctx.session.user.organizationId,
+            },
+          },
+        },
+        include: {
+          categories: true,
+          tax_rates: true,
+          parentProduct: true,
+        },
+        orderBy: [
+          { variantDisplayOrder: 'asc' },
+          { name: 'asc' },
+        ],
+      })
+
+      return variants
+    }),
+
+  convertToParent: organizationProcedure
+    .input(
+      z.object({
+        productId: z.string(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      // Convert a standalone product to a parent product
+      const product = await ctx.db.products.findFirst({
+        where: {
+          id: input.productId,
+          menus: {
+            restaurants: {
+              organizationId: ctx.session.user.organizationId,
+            },
+          },
+        },
+      })
+
+      if (!product) {
+        throw new Error('Product not found')
+      }
+
+      if (product.productType !== 'STANDALONE') {
+        throw new Error('Product is already part of variant system')
+      }
+
+      const updatedProduct = await ctx.db.products.update({
+        where: { id: input.productId },
+        data: {
+          productType: 'PARENT',
+          showOnMenu: false, // Parent products are templates, not shown on menu
+        },
+        include: {
+          categories: true,
+          tax_rates: true,
+          variants: true,
+        },
+      })
+
+      return updatedProduct
+    }),
+
+  generateAllergenMatrix: organizationProcedure
+    .input(
+      z.object({
+        restaurantId: z.string(),
+        productIds: z.array(z.string()).optional(),
+        includeCategories: z.boolean().default(true),
+        includeMayContain: z.boolean().default(true),
+        format: z.enum(['json', 'csv']).default('json'),
+      })
+    )
+    .query(async ({ ctx, input }) => {
+      const { restaurantId, productIds, includeCategories, includeMayContain } = input
+
+      // Get products - prioritize parent products for variants
+      const whereClause: any = {
+        menus: {
+          restaurants: {
+            id: restaurantId,
+            organizationId: ctx.session.user.organizationId,
+          },
+        },
+        OR: [
+          { productType: 'PARENT' },    // Show parent products
+          { productType: 'STANDALONE' }, // Show standalone products
+          { 
+            productType: 'VARIANT',
+            parentProductId: null       // Only show variants without parent (orphaned)
+          }
+        ],
+      }
+
+      if (productIds && productIds.length > 0) {
+        whereClause.id = { in: productIds }
+      }
+
+      const products = await ctx.db.products.findMany({
+        where: whereClause,
+        select: {
+          id: true,
+          name: true,
+          allergens: true,
+          mayContainAllergens: true,
+          categories: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+        },
+        orderBy: [
+          includeCategories ? { categories: { name: 'asc' } } : { name: 'asc' },
+          { name: 'asc' },
+        ],
+      })
+
+      // UK mandatory allergens in standard order
+      const ukAllergens = [
+        'Cereals containing gluten',
+        'Crustaceans',
+        'Eggs',
+        'Fish',
+        'Peanuts',
+        'Soybeans',
+        'Milk',
+        'Tree nuts',
+        'Celery',
+        'Mustard',
+        'Sesame seeds',
+        'Sulphites',
+        'Lupin',
+        'Molluscs',
+      ]
+
+      // Build matrix data
+      const matrixData = products.map(product => {
+        const allergenData: any = {
+          productId: product.id,
+          productName: product.name,
+          category: product.categories?.name || 'Uncategorized',
+        }
+
+        // Add allergen columns
+        ukAllergens.forEach(allergen => {
+          const contains = product.allergens?.includes(allergen) || false
+          const mayContain = includeMayContain && (product.mayContainAllergens?.includes(allergen) || false)
+          
+          if (contains && mayContain) {
+            allergenData[allergen] = '✓ (✓)' // Contains and may contain
+          } else if (contains) {
+            allergenData[allergen] = '✓' // Contains only
+          } else if (mayContain) {
+            allergenData[allergen] = '(✓)' // May contain only
+          } else {
+            allergenData[allergen] = '' // None
+          }
+        })
+
+        return allergenData
+      })
+
+      return {
+        products: matrixData,
+        allergens: ukAllergens,
+        metadata: {
+          totalProducts: products.length,
+          includeCategories,
+          includeMayContain,
+          generatedAt: new Date().toISOString(),
+          restaurantId,
+          compliance: 'UK SFBB and Natasha\'s Law',
+        },
+        legend: {
+          contains: '✓ = Contains allergen (legally declared)',
+          mayContain: '(✓) = May contain allergen (cross-contamination risk)',
+          both: '✓ (✓) = Contains and may contain allergen',
+        },
+        disclaimer: 'All food is cooked in the same oil. Allergens in brackets may be present in the food. For further information please speak to a member of staff.',
+      }
     }),
 })

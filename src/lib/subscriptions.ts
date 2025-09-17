@@ -105,7 +105,8 @@ export class SubscriptionService {
         break;
       
       case 'products':
-        currentUsage = await db.products.count({
+        // Count products: Parent + variants count as 1 product, standalone count as 1
+        const allProducts = await db.products.findMany({
           where: {
             menus: {
               restaurants: {
@@ -114,8 +115,18 @@ export class SubscriptionService {
               }
             },
             isActive: true
+          },
+          select: {
+            id: true,
+            productType: true,
+            parentProductId: true
           }
         });
+        
+        // Count logic: Only count parents and standalone products (not individual variants)
+        currentUsage = allProducts.filter(product => 
+          product.productType === 'PARENT' || product.productType === 'STANDALONE'
+        ).length;
         break;
       
       case 'apiCalls':
@@ -209,6 +220,65 @@ export class SubscriptionService {
         periodEnd
       }
     });
+  }
+
+  /**
+   * Check if organization can add variants to a parent product based on their subscription limits
+   */
+  static async checkVariantLimit(
+    organizationId: string,
+    parentProductId: string,
+    requestedAmount: number = 1
+  ): Promise<{
+    allowed: boolean;
+    currentVariants?: number;
+    limit?: number;
+    message?: string;
+  }> {
+    const subscription = await this.getSubscription(organizationId);
+    
+    if (!subscription.plan) {
+      return { allowed: false, message: 'No subscription plan found' };
+    }
+
+    // Define variant limits per subscription tier
+    const variantLimits = {
+      FREE: 3,
+      STARTER: 5,
+      PROFESSIONAL: -1, // unlimited
+      ENTERPRISE: -1    // unlimited
+    };
+
+    const limit = variantLimits[subscription.plan.tier as keyof typeof variantLimits];
+    
+    if (limit === undefined) {
+      return { allowed: false, message: 'Unknown subscription plan' };
+    }
+
+    // -1 means unlimited
+    if (limit === -1) {
+      return { allowed: true, limit: -1 };
+    }
+
+    // Count current variants for this parent product
+    const currentVariants = await db.products.count({
+      where: {
+        parentProductId,
+        productType: 'VARIANT',
+        isActive: true
+      }
+    });
+
+    const allowed = currentVariants + requestedAmount <= limit;
+    
+    return {
+      allowed,
+      currentVariants,
+      limit,
+      message: allowed 
+        ? undefined 
+        : `Variant limit exceeded for ${subscription.plan.tier} plan. Current: ${currentVariants}, Limit: ${limit}, Requested: ${requestedAmount}`
+    };
   }
 
   /**

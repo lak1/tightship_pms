@@ -261,6 +261,13 @@ model products {
   allergens               String[]                  @default([])
   mayContainAllergens     String[]                  @default([])
   dietaryInfo             String[]                  @default([])
+  
+  // Product variant system
+  productType             ProductType               @default(STANDALONE)
+  parentProductId         String?
+  variantAttributes       Json?                     @default("{}")  // { size: "Large", color: "Red", etc }
+  variantDisplayOrder     Int                       @default(0)
+  
   createdAt               DateTime                  @default(now())
   updatedAt               DateTime
   platform_mappings       platform_mappings[]
@@ -272,6 +279,10 @@ model products {
   menus                   menus                     @relation(fields: [menuId], references: [id], onDelete: Cascade)
   tax_rates               tax_rates?                @relation(fields: [taxRateId], references: [id])
   
+  // Product variant relationships
+  parentProduct           products?                 @relation("ProductVariants", fields: [parentProductId], references: [id], onDelete: Cascade)
+  variants                products[]                @relation("ProductVariants")
+  
   // Composite product relationships
   composite_components    composite_components[]    @relation("CompositeProduct")
   component_of            composite_components[]    @relation("ComponentProduct")
@@ -281,6 +292,7 @@ model products {
   modifier_for_products   product_simple_modifiers[] @relation("ModifierProduct")
 
   @@index([menuId], map: "idx_products_menuid")
+  @@index([parentProductId], map: "idx_products_parentid")
 }
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
@@ -422,6 +434,12 @@ enum PriceControl {
   MANUAL
   FORMULA
   MARKET
+}
+
+enum ProductType {
+  PARENT     // Template product (Cod, Fish & Chips)
+  VARIANT    // Size/style variations (Large Cod, Small Fish & Chips)
+  STANDALONE // Traditional single products
 }
 
 enum SubscriptionPlan {

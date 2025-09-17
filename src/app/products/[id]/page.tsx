@@ -6,7 +6,7 @@ import { useParams } from 'next/navigation'
 import { trpc } from '@/lib/trpc'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Save, History } from 'lucide-react'
+import { ArrowLeft, Save, History, Plus, Trash2, Edit, Copy } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -14,6 +14,7 @@ import DashboardLayout from '@/components/layout/dashboard-layout'
 import { STANDARD_ALLERGENS } from '@/lib/constants/allergens'
 import { NUTRITION_FIELDS } from '@/lib/types/nutrition'
 import SearchableSelect from '@/components/ui/searchable-select'
+import { useSubscriptionErrorHandler } from '@/lib/utils/subscription-errors'
 
 const nutritionalInfoSchema = z.object({
   calories: z.number().optional(),
@@ -56,6 +57,7 @@ export default function ProductDetailPage() {
   const params = useParams()
   const productId = params.id as string
   const { data: session, status } = useSession()
+  const { handleSubscriptionError } = useSubscriptionErrorHandler()
   const [ingredients, setIngredients] = useState<string[]>([])
   const [selectedAllergens, setSelectedAllergens] = useState<string[]>([])
   const [selectedMayContainAllergens, setSelectedMayContainAllergens] = useState<string[]>([])
@@ -120,7 +122,7 @@ export default function ProductDetailPage() {
     },
     onError: (error) => {
       console.error('Error updating product:', error)
-      alert('Failed to update product. Please try again.')
+      const handled = handleSubscriptionError(error, 'Failed to update product. Please try again.')
     }
   })
 
@@ -146,6 +148,49 @@ export default function ProductDetailPage() {
     onSuccess: () => {
       utils.product.getCompositeComponents.invalidate({ productId })
       utils.product.getById.invalidate({ id: productId })
+    }
+  })
+
+  // Variant-related state and mutations
+  const [showVariantForm, setShowVariantForm] = useState(false)
+  const [newVariantData, setNewVariantData] = useState({
+    name: '',
+    basePrice: 0,
+    displayPrice: 0,
+    size: '',
+    sku: '',
+    barcode: '',
+  })
+
+  // Get variants for this product (if it's a parent)
+  const { data: variants } = trpc.product.listVariants.useQuery(
+    { parentProductId: productId },
+    { enabled: !!product && (product.productType === 'PARENT' || product.variants?.length > 0) }
+  )
+
+  const convertToParentMutation = trpc.product.convertToParent.useMutation({
+    onSuccess: () => {
+      utils.product.getById.invalidate({ id: productId })
+    }
+  })
+
+  const createVariantMutation = trpc.product.createVariant.useMutation({
+    onSuccess: async () => {
+      // Force refresh of both variants and product data
+      await Promise.all([
+        utils.product.listVariants.invalidate({ parentProductId: productId }),
+        utils.product.getById.invalidate({ id: productId })
+      ])
+      
+      // Force refetch the product to get updated productType
+      utils.product.getById.refetch({ id: productId })
+      
+      setShowVariantForm(false)
+      setNewVariantData({ name: '', basePrice: 0, displayPrice: 0, size: '', sku: '', barcode: '' })
+    },
+    onError: (error) => {
+      console.error('Error creating variant:', error)
+      const handled = handleSubscriptionError(error, 'Failed to create variant. Please try again.')
     }
   })
 
@@ -317,6 +362,31 @@ export default function ProductDetailPage() {
     await createCategoryMutation.mutateAsync({
       menuId: product.menuId,
       name: newCategoryName.trim(),
+    })
+  }
+
+  // Variant management handlers
+  const handleConvertToParent = async () => {
+    if (!product || product.productType !== 'STANDALONE') return
+    
+    if (confirm(`Convert "${product.name}" to a parent product? This will allow you to create variants like "Small ${product.name}", "Large ${product.name}", etc.`)) {
+      await convertToParentMutation.mutateAsync({ productId })
+    }
+  }
+
+  const handleCreateVariant = async () => {
+    if (!product || !newVariantData.name || newVariantData.basePrice < 0) return
+    
+    const variantAttributes: Record<string, string> = {}
+    if (newVariantData.size) variantAttributes.size = newVariantData.size
+    
+    await createVariantMutation.mutateAsync({
+      parentProductId: productId,
+      name: newVariantData.name,
+      basePrice: newVariantData.basePrice,
+      variantAttributes,
+      sku: newVariantData.sku || undefined,
+      barcode: newVariantData.barcode || undefined,
     })
   }
 
@@ -795,6 +865,285 @@ export default function ProductDetailPage() {
                         )}
                       </div>
                     )}
+
+                    {/* Product Variants Management */}
+                    <div className="border border-gray-200 rounded-lg p-4 mt-6">
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-sm font-medium text-gray-900">Product Variants</h3>
+                        
+                        {/* Show different actions based on product type */}
+                        {product.productType === 'STANDALONE' && (
+                          <button
+                            type="button"
+                            onClick={handleConvertToParent}
+                            className="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"
+                          >
+                            <Copy className="mr-2 h-4 w-4" />
+                            Create Variants
+                          </button>
+                        )}
+                        
+                        {product.productType === 'PARENT' && (
+                          <button
+                            type="button"
+                            onClick={() => setShowVariantForm(true)}
+                            className="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700"
+                          >
+                            <Plus className="mr-2 h-4 w-4" />
+                            Add Variant
+                          </button>
+                        )}
+                      </div>
+
+                      {product.productType === 'STANDALONE' && (
+                        <div className="text-center py-8 text-gray-500">
+                          <Copy className="mx-auto h-8 w-8 mb-2" />
+                          <p className="text-sm">This is a standalone product.</p>
+                          <p className="text-xs mt-1">
+                            Click "Create Variants" to convert it to a parent product with size/style variations.
+                          </p>
+                          <p className="text-xs mt-2 text-gray-400">
+                            Example: Convert "Cod" → "Regular Cod", "Large Cod"
+                          </p>
+                        </div>
+                      )}
+
+                      {product.productType === 'VARIANT' && product.parentProduct && (
+                        <div className="bg-blue-50 rounded-lg p-4">
+                          <div className="flex items-center">
+                            <div className="flex-1">
+                              <p className="text-sm font-medium text-blue-900">
+                                This is a variant of "{product.parentProduct.name}"
+                              </p>
+                              <p className="text-xs text-blue-700 mt-1">
+                                Allergens and other attributes are inherited from the parent product.
+                              </p>
+                            </div>
+                            <Link
+                              href={`/products/${product.parentProduct.id}`}
+                              className="inline-flex items-center px-3 py-2 border border-blue-300 shadow-sm text-sm font-medium rounded-md text-blue-700 bg-white hover:bg-blue-50"
+                            >
+                              View Parent
+                            </Link>
+                          </div>
+                        </div>
+                      )}
+
+                      {product.productType === 'PARENT' && (
+                        <>
+                          {/* Existing variants list */}
+                          {variants && variants.length > 0 ? (
+                            <div className="space-y-3">
+                              {variants.map((variant) => (
+                                <div key={variant.id} className="flex items-center justify-between p-3 border border-gray-200 rounded-md bg-gray-50">
+                                  <div className="flex-1">
+                                    <div className="font-medium text-gray-900">
+                                      {variant.name}
+                                    </div>
+                                    <div className="text-sm text-gray-500">
+                                      <div>
+                                        Base: £{Number(variant.basePrice).toFixed(2)} 
+                                        {variant.tax_rates && (
+                                          <span className="ml-2">
+                                            • Display: £{roundToTwoDecimals(calculateDisplayPrice(variant.basePrice, variant.tax_rates)).toFixed(2)} 
+                                            (inc. {(variant.tax_rates.rate * 100).toFixed(0)}% {variant.tax_rates.name})
+                                          </span>
+                                        )}
+                                        {!variant.tax_rates && (
+                                          <span className="ml-2">• Display: £{Number(variant.basePrice).toFixed(2)} (no tax)</span>
+                                        )}
+                                      </div>
+                                      {variant.variantAttributes && Object.keys(variant.variantAttributes).length > 0 && (
+                                        <div className="mt-1">
+                                          Attributes: {Object.entries(variant.variantAttributes as Record<string, string>)
+                                            .map(([key, value]) => `${key}: ${value}`)
+                                            .join(', ')}
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <Link
+                                      href={`/products/${variant.id}`}
+                                      className="inline-flex items-center px-2 py-1 border border-gray-300 shadow-sm text-xs font-medium rounded text-gray-700 bg-white hover:bg-gray-50"
+                                    >
+                                      <Edit className="h-3 w-3 mr-1" />
+                                      Edit
+                                    </Link>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="text-center py-6 text-gray-500">
+                              <Plus className="mx-auto h-6 w-6 mb-2" />
+                              <p className="text-sm">No variants created yet.</p>
+                              <p className="text-xs mt-1">Add your first variant to get started.</p>
+                            </div>
+                          )}
+
+                          {/* Variant creation form */}
+                          {showVariantForm && (
+                            <div className="mt-6 p-4 border border-gray-300 rounded-lg bg-gray-50">
+                              <h4 className="text-sm font-medium text-gray-900 mb-3">Create New Variant</h4>
+                              
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                                    Product Name *
+                                  </label>
+                                  <input
+                                    type="text"
+                                    value={newVariantData.name}
+                                    onChange={(e) => setNewVariantData(prev => ({ ...prev, name: e.target.value }))}
+                                    placeholder={`e.g., Large ${product.name}, Small ${product.name}`}
+                                    className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                  />
+                                  <p className="text-xs text-gray-500 mt-1">Full product name including size/style</p>
+                                </div>
+                                
+                                <div className="md:col-span-2">
+                                  <div className="flex items-center justify-between mb-2">
+                                    <label className="block text-xs font-medium text-gray-700">
+                                      Pricing *
+                                    </label>
+                                    <div className="flex items-center gap-1 text-xs">
+                                      <span className="text-gray-500">Edit by:</span>
+                                      <button
+                                        type="button"
+                                        onClick={() => setPriceEditMode('base')}
+                                        className={`px-2 py-1 rounded text-xs ${
+                                          priceEditMode === 'base'
+                                            ? 'bg-blue-100 text-blue-700'
+                                            : 'bg-gray-100 text-gray-600'
+                                        }`}
+                                      >
+                                        Base Price
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => setPriceEditMode('display')}
+                                        className={`px-2 py-1 rounded text-xs ${
+                                          priceEditMode === 'display'
+                                            ? 'bg-blue-100 text-blue-700'
+                                            : 'bg-gray-100 text-gray-600'
+                                        }`}
+                                      >
+                                        Display Price
+                                      </button>
+                                    </div>
+                                  </div>
+                                  
+                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                    <div>
+                                      <label className="block text-xs font-medium text-gray-600 mb-1">
+                                        Base Price (Ex. TAX)
+                                      </label>
+                                      <div className="relative">
+                                        <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">£</span>
+                                        <input
+                                          type="number"
+                                          step="0.01"
+                                          min="0"
+                                          disabled={priceEditMode === 'display'}
+                                          value={newVariantData.basePrice || ''}
+                                          onChange={(e) => {
+                                            const value = parseFloat(e.target.value) || 0
+                                            setNewVariantData(prev => ({ 
+                                              ...prev, 
+                                              basePrice: value,
+                                              displayPrice: selectedTaxRate ? roundToTwoDecimals(calculateDisplayPrice(value, selectedTaxRate)) : value
+                                            }))
+                                          }}
+                                          className={`w-full border border-gray-300 rounded-md pl-6 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                                            priceEditMode === 'display' ? 'bg-gray-50' : ''
+                                          }`}
+                                          placeholder="0.00"
+                                        />
+                                      </div>
+                                    </div>
+                                    
+                                    <div>
+                                      <label className="block text-xs font-medium text-gray-600 mb-1">
+                                        Display Price (Inc. TAX)
+                                      </label>
+                                      <div className="relative">
+                                        <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">£</span>
+                                        <input
+                                          type="number"
+                                          step="0.01"
+                                          min="0"
+                                          disabled={priceEditMode === 'base'}
+                                          value={priceEditMode === 'display' ? (newVariantData.displayPrice || '') : (selectedTaxRate ? roundToTwoDecimals(calculateDisplayPrice(newVariantData.basePrice, selectedTaxRate)) : newVariantData.basePrice)}
+                                          onChange={(e) => {
+                                            const value = parseFloat(e.target.value) || 0
+                                            setNewVariantData(prev => ({ 
+                                              ...prev, 
+                                              displayPrice: value,
+                                              basePrice: selectedTaxRate ? roundToTwoDecimals(calculateBasePrice(value, selectedTaxRate)) : value
+                                            }))
+                                          }}
+                                          className={`w-full border border-gray-300 rounded-md pl-6 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                                            priceEditMode === 'base' ? 'bg-gray-50' : ''
+                                          }`}
+                                          placeholder="0.00"
+                                        />
+                                      </div>
+                                      <div className="text-xs text-gray-500 mt-1">
+                                        {selectedTaxRate ? `Includes ${(selectedTaxRate.rate * 100).toFixed(0)}% ${selectedTaxRate.name}` : 'No tax applied'}
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                                
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                                    SKU (optional)
+                                  </label>
+                                  <input
+                                    type="text"
+                                    value={newVariantData.sku}
+                                    onChange={(e) => setNewVariantData(prev => ({ ...prev, sku: e.target.value }))}
+                                    className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                  />
+                                </div>
+                              </div>
+                              
+                              <div className="flex items-center justify-end gap-2 mt-4">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setShowVariantForm(false)
+                                    setNewVariantData({ name: '', basePrice: 0, displayPrice: 0, size: '', sku: '', barcode: '' })
+                                  }}
+                                  className="px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
+                                >
+                                  Cancel
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={handleCreateVariant}
+                                  disabled={!newVariantData.name || newVariantData.basePrice < 0 || createVariantMutation.isPending}
+                                  className="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                  {createVariantMutation.isPending ? (
+                                    <>
+                                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                                      Creating...
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Plus className="mr-2 h-4 w-4" />
+                                      Create Variant
+                                    </>
+                                  )}
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
 
                     {/* Available Modifiers */}
                     <div className="border border-gray-200 rounded-lg p-4 mt-6">

@@ -83,8 +83,8 @@ export const subscriptionMiddleware = (options: TRPCSubscriptionOptions = {}) =>
       }
     }
 
-    // Check usage limits
-    if (options.requireLimit) {
+    // Check usage limits (bypass for OWNER role)
+    if (options.requireLimit && user.role !== 'OWNER') {
       const limitCheck = await SubscriptionService.checkLimit(
         organizationId,
         options.requireLimit.type,
