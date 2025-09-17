@@ -672,3 +672,40 @@ model product_simple_modifiers {
   @@index([productId])
   @@index([modifierId])
 }
+
+/// Custom label sizes saved by users
+model custom_labels {
+  id                String  @id
+  name              String  // User-friendly name like "My Allergen Labels"
+  description       String?
+  organizationId    String  // Belongs to organization
+  createdBy         String  // User who created it
+
+  // Label specifications (in millimeters)
+  width             Float
+  height            Float
+  columns           Int
+  rows              Int
+  topMargin         Float
+  leftMargin        Float
+  rightMargin       Float?
+  bottomMargin      Float?
+  horizontalSpacing Float
+  verticalSpacing   Float
+  pageWidth         Float   @default(210) // A4 width
+  pageHeight        Float   @default(297) // A4 height
+
+  // Metadata
+  category          String  @default("custom") // food, address, shipping, etc.
+  isShared          Boolean @default(false) // Can other users in org see it
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  // Relations
+  organization      organizations @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  creator           users         @relation(fields: [createdBy], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([createdBy])
+}

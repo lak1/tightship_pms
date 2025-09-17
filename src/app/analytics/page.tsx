@@ -3,17 +3,18 @@
 import { useState } from 'react'
 import { useSession } from 'next-auth/react'
 import { trpc } from '@/lib/trpc'
-import { 
-  BarChart3, 
-  TrendingUp, 
-  TrendingDown, 
-  DollarSign, 
-  Package, 
-  Users, 
+import {
+  BarChart3,
+  TrendingUp,
+  TrendingDown,
+  DollarSign,
+  Package,
+  Users,
   Download,
   Filter
 } from 'lucide-react'
 import DashboardLayout from '@/components/layout/dashboard-layout'
+import { useRestaurantMenu } from '@/contexts/RestaurantMenuContext'
 import {
   BarChart,
   Bar,
@@ -57,13 +58,8 @@ const topProducts = [
 
 export default function AnalyticsPage() {
   const { data: session, status } = useSession()
+  const { selectedRestaurant, selectedMenu } = useRestaurantMenu()
   const [dateRange, setDateRange] = useState('30d')
-  const [selectedRestaurant, setSelectedRestaurant] = useState('all')
-  
-  const { data: restaurants } = trpc.restaurant.list.useQuery(
-    undefined,
-    { enabled: !!session }
-  )
 
   if (status === 'loading') {
     return (
@@ -109,23 +105,6 @@ export default function AnalyticsPage() {
               </select>
             </div>
             
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Restaurant
-              </label>
-              <select
-                value={selectedRestaurant}
-                onChange={(e) => setSelectedRestaurant(e.target.value)}
-                className="border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="all">All Restaurants</option>
-                {restaurants?.map((restaurant) => (
-                  <option key={restaurant.id} value={restaurant.id}>
-                    {restaurant.name}
-                  </option>
-                ))}
-              </select>
-            </div>
           </div>
           
           <div className="flex space-x-2">

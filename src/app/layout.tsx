@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { TRPCProvider } from "@/providers/trpc-provider";
 import AuthSessionProvider from "@/providers/session-provider";
+import { RestaurantMenuProvider } from "@/contexts/RestaurantMenuContext";
 import { Toaster } from "sonner";
 
 const geistSans = Geist({
@@ -31,7 +32,11 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <AuthSessionProvider>
-          <TRPCProvider>{children}</TRPCProvider>
+          <TRPCProvider>
+            <RestaurantMenuProvider>
+              {children}
+            </RestaurantMenuProvider>
+          </TRPCProvider>
           <Toaster />
         </AuthSessionProvider>
       </body>

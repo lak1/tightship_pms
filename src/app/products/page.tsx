@@ -6,37 +6,29 @@ import { trpc } from '@/lib/trpc'
 import Link from 'next/link'
 import { Search, Plus, ChevronLeft, ChevronRight, Upload, Edit, Check, X } from 'lucide-react'
 import DashboardLayout from '@/components/layout/dashboard-layout'
+import { useRestaurantMenu } from '@/contexts/RestaurantMenuContext'
 
 export default function ProductsPage() {
   const { data: session, status } = useSession()
+  const { selectedRestaurant, selectedMenu } = useRestaurantMenu()
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedCategory, setSelectedCategory] = useState('')
-  const [selectedRestaurant, setSelectedRestaurant] = useState('')
   const [currentPage, setCurrentPage] = useState(1)
   const [showDisplayPrice, setShowDisplayPrice] = useState(false)
   const [editingProduct, setEditingProduct] = useState<string | null>(null)
   const [editingPrice, setEditingPrice] = useState('')
   const [itemsPerPage, setItemsPerPage] = useState(20)
 
-  // Fetch restaurants to get their menus
-  const { data: restaurants } = trpc.restaurant.list.useQuery(
-    undefined,
-    { enabled: !!session }
-  )
-
-  // Get all products from all restaurants
-  const restaurantQueries = trpc.useQueries((t) =>
-    restaurants?.map(restaurant => 
-      t.product.list({
-        restaurantId: restaurant.id,
-        search: searchTerm || undefined,
-        categoryId: selectedCategory || undefined,
-        page: 1,
-        limit: 1000, // Get all for now
-      }, {
-        enabled: !!restaurant.id,
-      })
-    ) ?? []
+  // Get products from selected restaurant only
+  const { data: productData } = trpc.product.list.useQuery(
+    {
+      restaurantId: selectedRestaurant?.id || '',
+      search: searchTerm || undefined,
+      categoryId: selectedCategory || undefined,
+      page: 1,
+      limit: 1000, // Get all for now
+    },
+    { enabled: !!selectedRestaurant?.id }
   )
 
   // Helper function to calculate display price
@@ -114,29 +106,20 @@ export default function ProductsPage() {
     setEditingPrice('')
   }
 
-  // Combine all products from all restaurants
+  // Get products from the selected restaurant
   const allProducts = useMemo(() => {
-    const products: Array<any> = []
-    restaurantQueries.forEach((query, index) => {
-      if (query.data?.products) {
-        query.data.products.forEach(product => {
-          products.push({
-            ...product,
-            restaurantName: restaurants?.[index]?.name,
-            restaurantId: restaurants?.[index]?.id,
-            displayPrice: calculateDisplayPrice(product.basePrice, product.tax_rates),
-          })
-        })
-      }
-    })
-    return products
-  }, [restaurantQueries, restaurants])
+    if (!productData?.products) return []
 
-  // Filter products based on selected restaurant
-  const filteredProducts = useMemo(() => {
-    if (!selectedRestaurant) return allProducts
-    return allProducts.filter(product => product.restaurantId === selectedRestaurant)
-  }, [allProducts, selectedRestaurant])
+    return productData.products.map(product => ({
+      ...product,
+      restaurantName: selectedRestaurant?.name,
+      restaurantId: selectedRestaurant?.id,
+      displayPrice: calculateDisplayPrice(product.basePrice, product.tax_rates),
+    }))
+  }, [productData, selectedRestaurant])
+
+  // Products are already filtered by restaurant via the query
+  const filteredProducts = allProducts
 
   // Get unique categories from all products
   const categories = useMemo(() => {
@@ -160,7 +143,7 @@ export default function ProductsPage() {
         currentPage * itemsPerPage
       )
 
-  const isLoading = status === 'loading' || restaurantQueries.some(q => q.isLoading)
+  const isLoading = status === 'loading'
 
   if (status === 'loading') {
     return (
@@ -249,19 +232,6 @@ export default function ProductsPage() {
               />
             </div>
 
-            {/* Restaurant Filter */}
-            <select
-              value={selectedRestaurant}
-              onChange={(e) => setSelectedRestaurant(e.target.value)}
-              className="border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            >
-              <option value="">All Restaurants</option>
-              {restaurants?.map((restaurant) => (
-                <option key={restaurant.id} value={restaurant.id}>
-                  {restaurant.name}
-                </option>
-              ))}
-            </select>
 
             {/* Category Filter */}
             <select
@@ -483,7 +453,7 @@ export default function ProductsPage() {
                 </svg>
                 <h3 className="text-lg font-medium text-gray-900 mb-2">No products found</h3>
                 <p className="text-gray-500 mb-4">
-                  {searchTerm || selectedCategory || selectedRestaurant
+                  {searchTerm || selectedCategory
                     ? 'Try adjusting your filters or search terms.'
                     : 'Get started by creating your first product or importing from a file.'}
                 </p>

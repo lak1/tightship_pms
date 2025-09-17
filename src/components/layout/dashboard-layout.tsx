@@ -4,19 +4,21 @@ import { ReactNode } from 'react'
 import { useSession } from 'next-auth/react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { 
-  Home, 
-  Package, 
-  Building2, 
-  BarChart3, 
-  RefreshCw, 
+import {
+  Home,
+  Package,
+  Building2,
+  BarChart3,
+  RefreshCw,
   Menu,
   X,
   Shield,
   CreditCard,
-  AlertTriangle
+  AlertTriangle,
+  Tag
 } from 'lucide-react'
 import { useState } from 'react'
+import { useRestaurantMenu } from '@/contexts/RestaurantMenuContext'
 
 interface DashboardLayoutProps {
   children: ReactNode
@@ -28,6 +30,7 @@ const navigation = [
   { name: 'Dashboard', href: '/', icon: Home },
   { name: 'Products', href: '/products', icon: Package },
   { name: 'Allergen Matrix', href: '/allergen-matrix', icon: AlertTriangle },
+  { name: 'Label Printing', href: '/label-printing', icon: Tag },
   { name: 'Restaurants', href: '/restaurants', icon: Building2 },
   { name: 'Sync Status', href: '/sync', icon: RefreshCw },
   { name: 'Analytics', href: '/analytics', icon: BarChart3 },
@@ -45,8 +48,84 @@ export default function DashboardLayout({ children, title, breadcrumbs }: Dashbo
   const { data: session } = useSession()
   const pathname = usePathname()
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  
+  const {
+    selectedRestaurant,
+    selectedMenu,
+    restaurants,
+    menus,
+    setSelectedRestaurant,
+    setSelectedMenu,
+    isLoading: contextLoading
+  } = useRestaurantMenu()
+
   const currentNavigation = getAdminNavigation(session?.user?.role || '')
+
+  // Don't show restaurant selector on certain pages
+  const hideRestaurantSelector = pathname === '/admin' || pathname === '/billing' || pathname.startsWith('/auth')
+
+  const GlobalRestaurantSelector = () => {
+    if (hideRestaurantSelector || !session) return null
+
+    return (
+      <div className="flex items-center gap-4 bg-gray-50 px-4 py-2 border-b">
+        <div className="flex items-center gap-2 text-sm text-gray-600">
+          <Building2 className="h-4 w-4" />
+          <span>Working with:</span>
+        </div>
+
+        {/* Restaurant Selector */}
+        <div className="flex items-center gap-2">
+          <select
+            value={selectedRestaurant?.id || ''}
+            onChange={(e) => {
+              const restaurant = restaurants.find(r => r.id === e.target.value) || null
+              setSelectedRestaurant(restaurant)
+            }}
+            disabled={contextLoading}
+            className="text-sm border border-gray-300 rounded-md px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50"
+          >
+            <option value="">Select Restaurant...</option>
+            {restaurants.map(restaurant => (
+              <option key={restaurant.id} value={restaurant.id}>
+                {restaurant.name}
+              </option>
+            ))}
+          </select>
+
+          {/* Menu Selector */}
+          {selectedRestaurant && (
+            <>
+              <span className="text-gray-400">→</span>
+              <select
+                value={selectedMenu?.id || ''}
+                onChange={(e) => {
+                  const menu = menus.find(m => m.id === e.target.value) || null
+                  setSelectedMenu(menu)
+                }}
+                disabled={contextLoading || menus.length === 0}
+                className="text-sm border border-gray-300 rounded-md px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50"
+              >
+                <option value="">Select Menu...</option>
+                {menus.map(menu => (
+                  <option key={menu.id} value={menu.id}>
+                    {menu.name}
+                  </option>
+                ))}
+              </select>
+            </>
+          )}
+        </div>
+
+        {/* Status indicator */}
+        {selectedRestaurant && selectedMenu && (
+          <div className="flex items-center gap-1 text-xs text-green-600 bg-green-50 px-2 py-1 rounded">
+            <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+            <span>{selectedRestaurant.name} / {selectedMenu.name}</span>
+          </div>
+        )}
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -173,6 +252,9 @@ export default function DashboardLayout({ children, title, breadcrumbs }: Dashbo
             <Menu className="h-6 w-6" />
           </button>
         </div>
+
+        {/* Global Restaurant/Menu Selector */}
+        <GlobalRestaurantSelector />
 
         {/* Page header */}
         {(title || breadcrumbs) && (

@@ -6,10 +6,11 @@ import { trpc } from '@/lib/trpc'
 import DashboardLayout from '@/components/layout/dashboard-layout'
 import { Download, Printer, Eye, EyeOff, Settings, Image, FileImage } from 'lucide-react'
 import { STANDARD_ALLERGENS } from '@/lib/constants/allergens'
+import { useRestaurantMenu } from '@/contexts/RestaurantMenuContext'
 
 export default function AllergenMatrixPage() {
   const { data: session } = useSession()
-  const [selectedRestaurantId, setSelectedRestaurantId] = useState('')
+  const { selectedRestaurant, selectedMenu } = useRestaurantMenu()
   const [selectedProducts, setSelectedProducts] = useState<string[]>([])
   const [includeCategories, setIncludeCategories] = useState(true)
   const [includeMayContain, setIncludeMayContain] = useState(true)
@@ -24,21 +25,17 @@ export default function AllergenMatrixPage() {
   const [showSettings, setShowSettings] = useState(false)
   const matrixRef = useRef<HTMLDivElement>(null)
 
-  const { data: restaurants } = trpc.restaurant.list.useQuery(undefined, {
-    enabled: !!session
-  })
-
   const { data: products } = trpc.product.list.useQuery(
-    { 
-      restaurantId: selectedRestaurantId,
-      limit: 1000 
+    {
+      restaurantId: selectedRestaurant?.id || '',
+      limit: 1000
     },
-    { enabled: !!selectedRestaurantId }
+    { enabled: !!selectedRestaurant?.id }
   )
 
   const { data: matrixData, refetch: generateMatrix } = trpc.product.generateAllergenMatrix.useQuery(
     {
-      restaurantId: selectedRestaurantId,
+      restaurantId: selectedRestaurant?.id || '',
       productIds: selectAll ? undefined : selectedProducts,
       includeCategories,
       includeMayContain,
@@ -47,12 +44,6 @@ export default function AllergenMatrixPage() {
       enabled: false // Manual trigger only
     }
   )
-
-  const handleRestaurantChange = (restaurantId: string) => {
-    setSelectedRestaurantId(restaurantId)
-    setSelectedProducts([])
-    setSelectAll(true)
-  }
 
   const handleProductSelection = (productId: string, selected: boolean) => {
     if (selected) {
@@ -74,7 +65,7 @@ export default function AllergenMatrixPage() {
   }
 
   const handleGenerateMatrix = () => {
-    if (selectedRestaurantId) {
+    if (selectedRestaurant?.id) {
       generateMatrix()
     }
   }
@@ -694,27 +685,8 @@ export default function AllergenMatrixPage() {
         {/* Configuration Panel */}
         <div className="bg-white shadow rounded-lg p-6 mb-6">
           <h2 className="text-lg font-medium text-gray-900 mb-6">Matrix Configuration</h2>
-          
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Restaurant Selection */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Select Restaurant
-              </label>
-              <select
-                value={selectedRestaurantId}
-                onChange={(e) => handleRestaurantChange(e.target.value)}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              >
-                <option value="">Choose a restaurant</option>
-                {restaurants?.map(restaurant => (
-                  <option key={restaurant.id} value={restaurant.id}>
-                    {restaurant.name}
-                  </option>
-                ))}
-              </select>
-            </div>
 
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Options */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -746,7 +718,7 @@ export default function AllergenMatrixPage() {
             <div className="flex items-end">
               <button
                 onClick={handleGenerateMatrix}
-                disabled={!selectedRestaurantId}
+                disabled={!selectedRestaurant?.id}
                 className="w-full inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Generate Matrix
