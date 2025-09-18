@@ -32,7 +32,7 @@ const navigation = [
   { name: 'Allergen Matrix', href: '/allergen-matrix', icon: AlertTriangle },
   { name: 'Label Printing', href: '/label-printing', icon: Tag },
   { name: 'Restaurants', href: '/restaurants', icon: Building2 },
-  { name: 'Sync Status', href: '/sync', icon: RefreshCw },
+  { name: 'Price Sync', href: '/sync', icon: RefreshCw },
   { name: 'Analytics', href: '/analytics', icon: BarChart3 },
 ]
 

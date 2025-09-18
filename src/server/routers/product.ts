@@ -409,6 +409,30 @@ export const productRouter = createTRPCRouter({
           const { queueGoogleMenuSync } = await import('@/lib/google/menuSync')
           await queueGoogleMenuSync(googleIntegration.id, 'PRICE_CHANGE')
         }
+
+        // Trigger price push to delivery platforms
+        try {
+          const { syncRouter } = await import('./sync')
+          const syncService = syncRouter.createCaller({
+            session: ctx.session,
+            db: ctx.db,
+            req: ctx.req,
+            resHeaders: ctx.resHeaders
+          })
+
+          // Trigger price push (non-blocking)
+          syncService.triggerPricePush({
+            productId: id,
+            oldPrice: Number(existingProduct.basePrice),
+            newPrice: data.basePrice,
+          }).catch(error => {
+            console.error('Failed to trigger price push:', error)
+            // Don't throw error to avoid breaking product update
+          })
+        } catch (error) {
+          console.error('Failed to trigger price push:', error)
+          // Don't throw error to avoid breaking product update
+        }
       }
 
       // If base price changed, create new price record
