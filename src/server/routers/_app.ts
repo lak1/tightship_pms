@@ -6,6 +6,7 @@ import { dashboardRouter } from './dashboard'
 import { subscriptionRouter } from './subscription'
 import { labelsRouter } from './labels'
 import { syncRouter } from './sync'
+import { loyverseRouter } from './loyverse'
 
 export const appRouter = createTRPCRouter({
   product: productRouter,
@@ -15,6 +16,7 @@ export const appRouter = createTRPCRouter({
   subscription: subscriptionRouter,
   labels: labelsRouter,
   sync: syncRouter,
+  loyverse: loyverseRouter,
 })
 
 export type AppRouter = typeof appRouter
