@@ -120,31 +120,63 @@ export default function LandingPage() {
         <div className="absolute inset-x-0 -top-40 -z-10 transform-gpu overflow-hidden blur-3xl sm:-top-80">
           <div className="relative left-[calc(50%-11rem)] aspect-[1155/678] w-[36.125rem] -translate-x-1/2 rotate-[30deg] bg-gradient-to-tr from-teal-400 to-cyan-600 opacity-30 sm:left-[calc(50%-30rem)] sm:w-[72.1875rem]" />
         </div>
-        
+
         <div className="mx-auto max-w-4xl pt-16 pb-32 sm:pt-20 sm:pb-40 lg:pt-24 lg:pb-48">
           <div className="text-center">
+            {/* Trust Badges */}
+            <div className="mb-6 flex justify-center items-center gap-4 flex-wrap">
+              <div className="flex items-center gap-2 bg-white/80 backdrop-blur-sm px-4 py-2 rounded-full shadow-sm">
+                <Star className="h-4 w-4 text-yellow-500 fill-yellow-500" />
+                <span className="text-sm font-medium text-gray-700">Trusted by restaurants</span>
+              </div>
+              <div className="flex items-center gap-2 bg-white/80 backdrop-blur-sm px-4 py-2 rounded-full shadow-sm">
+                <Shield className="h-4 w-4 text-teal-600" />
+                <span className="text-sm font-medium text-gray-700">Secure & compliant</span>
+              </div>
+            </div>
+
             <h1 className="text-4xl font-bold tracking-tight text-gray-900 sm:text-6xl lg:text-7xl">
-              Complete Menu Management.
-              <span className="block text-teal-600 mt-2">One Platform.</span>
+              Sync Your Menus to
+              <span className="block text-teal-600 mt-2">Deliveroo & Uber Eats</span>
+              <span className="block text-gray-700 text-3xl sm:text-4xl lg:text-5xl mt-4">In One Click</span>
             </h1>
             <p className="mt-6 text-lg leading-8 text-gray-600 max-w-2xl mx-auto">
-              Manage menus, track ingredients & allergens, sync prices across platforms, and gain valuable insights into your restaurant operations. 
-              Everything you need for comprehensive menu management.
+              Stop manually updating menus across multiple platforms. Tightship automatically syncs your complete menu data—prices, descriptions, allergens, and availability—to all your delivery platforms instantly.
             </p>
-            <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4 max-w-md mx-auto">
-              <input
-                type="email"
-                placeholder="Enter your email"
-                className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-600 focus:border-transparent"
-              />
-              <Link href="/auth/signup" className="w-full sm:w-auto px-6 py-3 bg-teal-600 text-white font-semibold rounded-lg hover:bg-teal-700 transition-colors whitespace-nowrap inline-block text-center">
-                Get Started
-              </Link>
+
+            {/* Platform Logos */}
+            <div className="mt-8 flex items-center justify-center gap-8 flex-wrap">
+              <div className="flex items-center gap-2 text-sm font-medium text-gray-600">
+                <div className="w-24 h-8 bg-white rounded shadow-sm flex items-center justify-center text-xs font-bold text-teal-600">
+                  Deliveroo
+                </div>
+              </div>
+              <div className="flex items-center gap-2 text-sm font-medium text-gray-600">
+                <div className="w-24 h-8 bg-white rounded shadow-sm flex items-center justify-center text-xs font-bold text-gray-900">
+                  Uber Eats
+                </div>
+              </div>
+              <div className="flex items-center gap-2 text-sm font-medium text-gray-600">
+                <div className="w-24 h-8 bg-white rounded shadow-sm flex items-center justify-center text-xs font-bold text-gray-500">
+                  Loyverse
+                </div>
+              </div>
             </div>
-            <p className="mt-4 text-sm text-gray-500">Start your free trial today. No credit card required.</p>
+
+            <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4 max-w-md mx-auto">
+              <Link href="/auth/signup" className="w-full sm:w-auto px-8 py-4 bg-teal-600 text-white font-semibold rounded-lg hover:bg-teal-700 transition-colors shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 inline-block text-center text-lg">
+                Start Free Trial →
+              </Link>
+              <a href="#benefits" className="w-full sm:w-auto px-8 py-4 bg-white text-teal-600 font-semibold rounded-lg hover:bg-gray-50 transition-colors shadow-md border-2 border-teal-600 inline-block text-center text-lg">
+                See How It Works
+              </a>
+            </div>
+            <p className="mt-4 text-sm text-gray-600">
+              <span className="font-semibold">Free forever</span> for single location • No credit card required • Cancel anytime
+            </p>
           </div>
         </div>
-        
+
         <div className="absolute inset-x-0 top-[calc(100%-13rem)] -z-10 transform-gpu overflow-hidden blur-3xl sm:top-[calc(100%-30rem)]">
           <div className="relative left-[calc(50%+3rem)] aspect-[1155/678] w-[36.125rem] -translate-x-1/2 bg-gradient-to-tr from-teal-400 to-cyan-600 opacity-30 sm:left-[calc(50%+36rem)] sm:w-[72.1875rem]" />
         </div>
