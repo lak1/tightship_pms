@@ -101,6 +101,7 @@ model menus {
   categories   categories[]
   restaurants  restaurants  @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
   products     products[]
+  menuDesigns  menu_designs[]
 
   @@index([restaurantId], map: "idx_menus_restaurantid")
 }
@@ -148,6 +149,9 @@ model organizations {
   subscriptions subscriptions?
   users         users[]
   usageTracking usage_tracking[]
+  customLabels  custom_labels[]
+  menuTemplates menu_templates[]
+  colorPalettes color_palettes[]
 }
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
@@ -312,6 +316,7 @@ model restaurants {
   organizations       organizations         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   sync_jobs           sync_jobs[]
   google_integrations google_integrations[]
+  menuDesigns         menu_designs[]
 
   @@index([organizationId], map: "idx_restaurants_organizationid")
 }
@@ -411,6 +416,9 @@ model users {
   Account        Account[]
   Session        Session[]
   organizations  organizations? @relation(fields: [organizationId], references: [id])
+  customLabels   custom_labels[]
+  menuTemplates  menu_templates[]
+  menuDesigns    menu_designs[]
 
   @@index([email], map: "idx_users_email")
   @@index([organizationId], map: "idx_users_organizationid")
@@ -475,6 +483,8 @@ enum SyncType {
   FULL
   INCREMENTAL
   PRICE_ONLY
+  PRICE_UPDATE
+  BULK_PRICE_UPDATE
 }
 
 enum UserRole {
@@ -708,4 +718,183 @@ model custom_labels {
 
   @@index([organizationId])
   @@index([createdBy])
+}
+
+/// Menu design templates created by users or system
+model menu_templates {
+  id             String           @id
+  name           String
+  description    String?
+  category       String           @default("menu") // menu, poster, display-board, etc.
+  thumbnail      String?          // URL to preview image
+  templateData   Json             // Fabric.js canvas JSON
+  tags           String[]         @default([]) // modern, vintage, minimalist, etc.
+  colorScheme    Json?            // Template color scheme definition
+  downloads      Int              @default(0) // Track template usage
+  avgRating      Decimal?         @db.Decimal(3, 2) // Average user rating
+  organizationId String?          // null for system templates
+  createdBy      String?          // null for system templates
+  isPublic       Boolean          @default(false) // Can other organizations use it
+  isActive       Boolean          @default(true)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  // Relations
+  organization   organizations?   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  creator        users?           @relation(fields: [createdBy], references: [id], onDelete: SetNull)
+  designs        menu_designs[]   // Designs created from this template
+  ratings        template_ratings[] // User ratings
+
+  @@index([organizationId])
+  @@index([createdBy])
+  @@index([category])
+  @@index([isPublic])
+}
+
+/// Individual menu designs created by users
+model menu_designs {
+  id             String            @id
+  name           String
+  description    String?
+  designData     Json              // Fabric.js canvas JSON with full design
+  settings       Json              @default("{}") // Canvas settings: gridSize, snapToGrid, showRulers, etc.
+  thumbnailUrl   String?           // Preview thumbnail
+  lastEditedBy   String?           // Last user who edited
+  templateId     String?           // Reference to template if created from one
+  restaurantId   String
+  menuId         String?           // Optional: link to specific menu
+  createdBy      String
+  isActive       Boolean           @default(true)
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  // Relations
+  template       menu_templates?   @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  restaurant     restaurants       @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  menu           menus?            @relation(fields: [menuId], references: [id], onDelete: SetNull)
+  creator        users             @relation(fields: [createdBy], references: [id], onDelete: Cascade)
+  assets         design_assets[]   // Images and other assets used in design
+
+  @@index([restaurantId])
+  @@index([menuId])
+  @@index([createdBy])
+  @@index([templateId])
+}
+
+/// Assets (images, fonts, etc.) used in designs
+model design_assets {
+  id              String        @id
+  designId        String
+  assetType       AssetType     // image, font, icon, etc.
+  fileName        String
+  fileUrl         String        // URL to stored asset
+  fileSize        Int?          // File size in bytes
+  mimeType        String?       // MIME type
+  metadata        Json          @default("{}") // Additional asset metadata
+  transformations Json?         // Image transformations (crop, filters, etc.)
+  sourceUrl       String?       // Original source URL (for stock photos)
+  createdAt       DateTime      @default(now())
+
+  // Relations
+  design          menu_designs  @relation(fields: [designId], references: [id], onDelete: Cascade)
+
+  @@index([designId])
+  @@index([assetType])
+}
+
+/// Google Fonts cache for performance
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model font_cache {
+  id         String    @id
+  fontFamily String    @unique
+  fontUrl    String?
+  variants   Json?     // [{style, weight, url}]
+  category   String?   // serif, sans-serif, display, etc.
+  lastUsed   DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@index([fontFamily])
+  @@index([category])
+}
+
+/// Enum for asset types
+enum AssetType {
+  IMAGE
+  FONT
+  ICON
+  BACKGROUND
+  LOGO
+}
+
+/// Template ratings by users
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model template_ratings {
+  id         String          @id
+  templateId String
+  userId     String
+  rating     Int             // 1-5 stars
+  createdAt  DateTime        @default(now())
+
+  // Relations
+  template   menu_templates  @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@unique([templateId, userId])
+  @@index([templateId])
+  @@index([rating])
+}
+
+/// Organization color palettes
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model color_palettes {
+  id             String         @id
+  name           String
+  description    String?
+  organizationId String?        // null for public palettes
+  createdBy      String?
+  colors         Json           // [{name, hex, rgb, position}]
+  isDefault      Boolean        @default(false)
+  isPublic       Boolean        @default(false)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  // Relations
+  organization   organizations? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([isPublic])
+}
+
+/// Comments on designs for collaboration
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model design_comments {
+  id         String       @id
+  designId   String
+  userId     String
+  x          Decimal?     @db.Decimal(10, 2) // Canvas x position
+  y          Decimal?     @db.Decimal(10, 2) // Canvas y position
+  comment    String
+  resolved   Boolean      @default(false)
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+
+  @@index([designId])
+  @@index([userId])
+  @@index([resolved])
+}
+
+/// Design version history
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model design_versions {
+  id                String   @id
+  designId          String
+  versionNumber     Int
+  designData        Json     // Full design snapshot
+  createdBy         String
+  changeDescription String?
+  createdAt         DateTime @default(now())
+
+  @@unique([designId, versionNumber])
+  @@index([designId])
+  @@index([createdAt])
 }

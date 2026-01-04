@@ -15,7 +15,10 @@ import {
   Shield,
   CreditCard,
   AlertTriangle,
-  Tag
+  Tag,
+  Palette,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react'
 import { useState } from 'react'
 import { useRestaurantMenu } from '@/contexts/RestaurantMenuContext'
@@ -31,6 +34,7 @@ const navigation = [
   { name: 'Products', href: '/products', icon: Package },
   { name: 'Allergen Matrix', href: '/allergen-matrix', icon: AlertTriangle },
   { name: 'Label Printing', href: '/label-printing', icon: Tag },
+  { name: 'Design Editor', href: '/design-editor', icon: Palette },
   { name: 'Restaurants', href: '/restaurants', icon: Building2 },
   { name: 'Price Sync', href: '/sync', icon: RefreshCw },
   { name: 'Analytics', href: '/analytics', icon: BarChart3 },
@@ -48,6 +52,7 @@ export default function DashboardLayout({ children, title, breadcrumbs }: Dashbo
   const { data: session } = useSession()
   const pathname = usePathname()
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [desktopSidebarCollapsed, setDesktopSidebarCollapsed] = useState(false)
   const {
     selectedRestaurant,
     selectedMenu,
@@ -194,11 +199,26 @@ export default function DashboardLayout({ children, title, breadcrumbs }: Dashbo
       </div>
 
       {/* Desktop sidebar */}
-      <div className="hidden md:flex md:w-64 md:flex-col md:fixed md:inset-y-0">
+      <div className={`hidden md:flex md:flex-col md:fixed md:inset-y-0 transition-all duration-300 ${
+        desktopSidebarCollapsed ? 'md:w-16' : 'md:w-64'
+      }`}>
         <div className="flex-1 flex flex-col min-h-0 bg-white shadow">
           <div className="flex-1 flex flex-col pt-5 pb-4 overflow-y-auto">
-            <div className="flex items-center flex-shrink-0 px-4">
-              <span className="text-xl font-semibold text-gray-900">Tightship PMS</span>
+            <div className="flex items-center flex-shrink-0 px-4 justify-between">
+              {!desktopSidebarCollapsed && (
+                <span className="text-xl font-semibold text-gray-900">Tightship PMS</span>
+              )}
+              <button
+                onClick={() => setDesktopSidebarCollapsed(!desktopSidebarCollapsed)}
+                className="p-1 rounded-md text-gray-500 hover:text-gray-700 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                title={desktopSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+              >
+                {desktopSidebarCollapsed ? (
+                  <ChevronRight className="h-5 w-5" />
+                ) : (
+                  <ChevronLeft className="h-5 w-5" />
+                )}
+              </button>
             </div>
             <nav className="mt-5 flex-1 px-2 space-y-1">
               {currentNavigation.map((item) => {
@@ -211,10 +231,13 @@ export default function DashboardLayout({ children, title, breadcrumbs }: Dashbo
                       isActive
                         ? 'bg-blue-100 text-blue-700'
                         : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                    } group flex items-center px-2 py-2 text-sm font-medium rounded-md`}
+                    } group flex items-center px-2 py-2 text-sm font-medium rounded-md ${
+                      desktopSidebarCollapsed ? 'justify-center' : ''
+                    }`}
+                    title={desktopSidebarCollapsed ? item.name : ''}
                   >
-                    <item.icon className="mr-3 h-5 w-5" />
-                    {item.name}
+                    <item.icon className={`h-5 w-5 ${desktopSidebarCollapsed ? '' : 'mr-3'}`} />
+                    {!desktopSidebarCollapsed && item.name}
                   </Link>
                 )
               })}
@@ -222,26 +245,30 @@ export default function DashboardLayout({ children, title, breadcrumbs }: Dashbo
           </div>
 
           {/* Desktop user section */}
-          <div className="flex-shrink-0 flex border-t border-gray-200 p-4">
-            <div className="flex items-center w-full">
-              <div className="ml-3 flex-1">
-                <p className="text-sm font-medium text-gray-700 group-hover:text-gray-900">
-                  {session?.user?.email}
-                </p>
-                <Link
-                  href="/api/auth/signout"
-                  className="text-xs font-medium text-red-600 hover:text-red-500"
-                >
-                  Sign out
-                </Link>
+          {!desktopSidebarCollapsed && (
+            <div className="flex-shrink-0 flex border-t border-gray-200 p-4">
+              <div className="flex items-center w-full">
+                <div className="ml-3 flex-1">
+                  <p className="text-sm font-medium text-gray-700 group-hover:text-gray-900">
+                    {session?.user?.email}
+                  </p>
+                  <Link
+                    href="/api/auth/signout"
+                    className="text-xs font-medium text-red-600 hover:text-red-500"
+                  >
+                    Sign out
+                  </Link>
+                </div>
               </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
 
       {/* Main content */}
-      <div className="md:pl-64 flex flex-col flex-1">
+      <div className={`flex flex-col flex-1 transition-all duration-300 ${
+        desktopSidebarCollapsed ? 'md:pl-16' : 'md:pl-64'
+      }`}>
         {/* Mobile header */}
         <div className="sticky top-0 z-10 md:hidden pl-1 pt-1 sm:pl-3 sm:pt-3 bg-white border-b border-gray-200">
           <button
