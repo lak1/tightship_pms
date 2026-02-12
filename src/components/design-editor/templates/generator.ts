@@ -239,7 +239,7 @@ export const LAYOUT_CONFIGS: Record<string, LayoutConfig> = {
 }
 
 /**
- * Generate a template JSON object for Fabric.js
+ * Generate a template JSON object for Fabric.js v6
  */
 export function generateTemplate(config: TemplateConfig): any {
   const { colorScheme, typography, layout } = config
@@ -248,12 +248,17 @@ export function generateTemplate(config: TemplateConfig): any {
 
   // Background
   objects.push({
-    type: 'rect',
+    type: 'Rect',
+    version: '6.0.0',
+    originX: 'left',
+    originY: 'top',
     left: 0,
     top: 0,
     width: layout.width,
     height: layout.height,
     fill: colorScheme.background,
+    stroke: null,
+    strokeWidth: 0,
     selectable: false,
     evented: false,
   })
@@ -261,9 +266,12 @@ export function generateTemplate(config: TemplateConfig): any {
   // Title/Header
   const titleY = layout.margins.top
   objects.push({
-    type: 'text',
+    type: 'Text',
+    version: '6.0.0',
     left: layout.width / 2,
     top: titleY,
+    width: 200,
+    height: typography.headingSize,
     text: 'MENU',
     fontFamily: typography.headingFont,
     fontSize: typography.headingSize,
@@ -271,27 +279,38 @@ export function generateTemplate(config: TemplateConfig): any {
     fontWeight: 'bold',
     textAlign: 'center',
     originX: 'center',
+    originY: 'top',
   })
 
   // Decorative line under title
   if (config.decorativeElements) {
     objects.push({
-      type: 'rect',
+      type: 'Rect',
+      version: '6.0.0',
+      originX: 'left',
+      originY: 'top',
       left: layout.width / 2 - 200,
       top: titleY + typography.headingSize + 20,
       width: 400,
       height: 3,
       fill: colorScheme.accent,
-      selectable: false,
+      stroke: null,
+      strokeWidth: 0,
+      selectable: true,
     })
   }
 
   // Category example
   const categoryY = titleY + typography.headingSize + 80
   objects.push({
-    type: 'text',
+    type: 'Text',
+    version: '6.0.0',
+    originX: 'left',
+    originY: 'top',
     left: layout.margins.left,
     top: categoryY,
+    width: 200,
+    height: typography.categorySize,
     text: 'Appetizers',
     fontFamily: typography.headingFont,
     fontSize: typography.categorySize,
@@ -301,15 +320,21 @@ export function generateTemplate(config: TemplateConfig): any {
 
   // Category underline
   objects.push({
-    type: 'line',
+    type: 'Line',
+    version: '6.0.0',
+    originX: 'left',
+    originY: 'top',
     left: layout.margins.left,
     top: categoryY + typography.categorySize + 10,
+    width: 300,
+    height: 0,
     x1: 0,
     y1: 0,
     x2: 300,
     y2: 0,
     stroke: colorScheme.border,
     strokeWidth: 2,
+    fill: null,
   })
 
   // Sample menu items
@@ -321,9 +346,14 @@ export function generateTemplate(config: TemplateConfig): any {
 
     // Item name
     objects.push({
-      type: 'text',
+      type: 'Text',
+      version: '6.0.0',
+      originX: 'left',
+      originY: 'top',
       left: layout.margins.left,
       top: itemY,
+      width: 300,
+      height: typography.itemSize,
       text: `Menu Item ${i + 1}`,
       fontFamily: typography.bodyFont,
       fontSize: typography.itemSize,
@@ -333,22 +363,31 @@ export function generateTemplate(config: TemplateConfig): any {
 
     // Price
     objects.push({
-      type: 'text',
+      type: 'Text',
+      version: '6.0.0',
+      originX: 'right',
+      originY: 'top',
       left: layout.width - layout.margins.right,
       top: itemY,
+      width: 100,
+      height: typography.priceSize,
       text: `$${(12 + i * 2)}.99`,
       fontFamily: typography.bodyFont,
       fontSize: typography.priceSize,
       fill: colorScheme.accent,
       fontWeight: 'bold',
-      originX: 'right',
     })
 
     // Description
     objects.push({
-      type: 'text',
+      type: 'Text',
+      version: '6.0.0',
+      originX: 'left',
+      originY: 'top',
       left: layout.margins.left,
       top: itemY + typography.itemSize + 8,
+      width: layout.width - layout.margins.left - layout.margins.right - 100,
+      height: typography.descriptionSize,
       text: 'A delicious description of this amazing menu item',
       fontFamily: typography.bodyFont,
       fontSize: typography.descriptionSize,
@@ -360,19 +399,23 @@ export function generateTemplate(config: TemplateConfig): any {
   // Footer decorative element
   if (config.decorativeElements) {
     objects.push({
-      type: 'text',
+      type: 'Text',
+      version: '6.0.0',
+      originX: 'center',
+      originY: 'top',
       left: layout.width / 2,
       top: layout.height - layout.margins.bottom - 40,
+      width: 100,
+      height: 20,
       text: '✦ ✦ ✦',
       fontFamily: typography.bodyFont,
       fontSize: 20,
       fill: colorScheme.accent,
-      originX: 'center',
     })
   }
 
   return {
-    version: '5.3.0',
+    version: '6.0.0',
     objects,
     background: colorScheme.background,
   }

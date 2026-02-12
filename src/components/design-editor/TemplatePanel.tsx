@@ -73,30 +73,122 @@ export default function TemplatePanel({ canvas, onTemplateLoad }: TemplatePanelP
     if (!canvas) return
 
     try {
-      // Load the generated Fabric.js JSON
-      canvas.loadFromJSON(template.templateData, () => {
-        canvas.renderAll()
+      console.log('Loading gallery template:', template.name)
+      console.log('Template data:', template.templateData)
+      console.log('First object sample:', JSON.stringify(template.templateData.objects?.[0], null, 2))
 
-        // Convert to legacy format for onTemplateLoad callback
-        const legacyTemplate: DesignTemplate = {
-          id: template.id,
-          name: template.name,
-          description: template.description,
-          category: template.category,
-          size: TEMPLATE_SIZES[0], // Default size
-          backgroundColor: template.templateData.background || '#ffffff',
-          margins: { top: 40, right: 40, bottom: 40, left: 40 },
-          defaultStyles: {
-            heading: { fontSize: 32, fontFamily: 'Arial', fontWeight: 'bold', color: '#2c3e50' },
-            category: { fontSize: 24, fontFamily: 'Arial', fontWeight: 'bold', color: '#34495e' },
-            itemName: { fontSize: 16, fontFamily: 'Arial', fontWeight: 'normal', color: '#2c3e50' },
-            itemPrice: { fontSize: 16, fontFamily: 'Arial', fontWeight: 'bold', color: '#e74c3c' },
-            itemDescription: { fontSize: 12, fontFamily: 'Arial', fontWeight: 'normal', color: '#7f8c8d' }
+      // Calculate scale factor for the template
+      const firstObject = template.templateData.objects?.[0]
+      if (!firstObject || !firstObject.width || !firstObject.height) {
+        console.error('No valid first object found')
+        return
+      }
+
+      const maxWidth = 800
+      const maxHeight = 600
+      const templateWidth = firstObject.width
+      const templateHeight = firstObject.height
+
+      // Calculate scale to fit canvas
+      const scale = Math.min(maxWidth / templateWidth, maxHeight / templateHeight)
+      const canvasWidth = Math.round(templateWidth * scale)
+      const canvasHeight = Math.round(templateHeight * scale)
+
+      console.log('Template size:', templateWidth, 'x', templateHeight)
+      console.log('Scale factor:', scale)
+      console.log('Canvas size:', canvasWidth, 'x', canvasHeight)
+
+      canvas.setDimensions({ width: canvasWidth, height: canvasHeight })
+
+      // Clear canvas before loading
+      canvas.clear()
+
+      // Set background color
+      canvas.backgroundColor = template.templateData.background || '#ffffff'
+
+      // Create Fabric objects from template data manually, scaled down
+      const templateObjects = template.templateData.objects || []
+      console.log('Creating', templateObjects.length, 'objects manually with scale', scale)
+
+      templateObjects.forEach((objData: any, index: number) => {
+        try {
+          let fabricObj: fabric.Object | null = null
+
+          if (objData.type === 'Rect') {
+            fabricObj = new fabric.Rect({
+              left: objData.left * scale,
+              top: objData.top * scale,
+              width: objData.width * scale,
+              height: objData.height * scale,
+              fill: objData.fill,
+              stroke: objData.stroke,
+              strokeWidth: (objData.strokeWidth || 0) * scale,
+              selectable: objData.selectable !== false,
+              evented: objData.evented !== false,
+            })
+          } else if (objData.type === 'Text') {
+            fabricObj = new fabric.Text(objData.text || '', {
+              left: objData.left * scale,
+              top: objData.top * scale,
+              fontSize: (objData.fontSize || 16) * scale,
+              fontFamily: objData.fontFamily || 'Arial',
+              fontWeight: objData.fontWeight || 'normal',
+              fontStyle: objData.fontStyle || 'normal',
+              fill: objData.fill || '#000000',
+              textAlign: objData.textAlign || 'left',
+              originX: objData.originX || 'left',
+              originY: objData.originY || 'top',
+            })
+          } else if (objData.type === 'Line') {
+            fabricObj = new fabric.Line(
+              [
+                (objData.x1 || 0) * scale,
+                (objData.y1 || 0) * scale,
+                (objData.x2 || 0) * scale,
+                (objData.y2 || 0) * scale
+              ],
+              {
+                left: objData.left * scale,
+                top: objData.top * scale,
+                stroke: objData.stroke,
+                strokeWidth: (objData.strokeWidth || 1) * scale,
+              }
+            )
           }
-        }
 
-        onTemplateLoad(legacyTemplate)
+          if (fabricObj) {
+            canvas.add(fabricObj)
+          }
+        } catch (err) {
+          console.error('Error creating object', index, 'Type:', objData.type)
+          console.error('Object data:', JSON.stringify(objData, null, 2))
+          console.error('Error:', err)
+        }
       })
+
+      console.log('Objects created, rendering...')
+      canvas.renderAll()
+      console.log('Final canvas objects count:', canvas.getObjects().length)
+
+      // Convert to legacy format for onTemplateLoad callback
+      const legacyTemplate: DesignTemplate = {
+        id: template.id,
+        name: template.name,
+        description: template.description,
+        category: template.category as any,
+        size: TEMPLATE_SIZES[0], // Default size
+        backgroundColor: template.templateData.background || '#ffffff',
+        margins: { top: 40, right: 40, bottom: 40, left: 40 },
+        defaultStyles: {
+          heading: { fontSize: 32, fontFamily: 'Arial', fontWeight: 'bold', color: '#2c3e50' },
+          category: { fontSize: 24, fontFamily: 'Arial', fontWeight: 'bold', color: '#34495e' },
+          itemName: { fontSize: 16, fontFamily: 'Arial', fontWeight: 'normal', color: '#2c3e50' },
+          itemPrice: { fontSize: 16, fontFamily: 'Arial', fontWeight: 'bold', color: '#e74c3c' },
+          itemDescription: { fontSize: 12, fontFamily: 'Arial', fontWeight: 'normal', color: '#7f8c8d' }
+        }
+      }
+
+      onTemplateLoad(legacyTemplate)
     } catch (error) {
       console.error('Error loading gallery template:', error)
       alert('Error loading template. Please try again.')
@@ -449,9 +541,12 @@ export default function TemplatePanel({ canvas, onTemplateLoad }: TemplatePanelP
       <ScrollArea className="flex-1">
         <div className={activeTab === 'gallery' ? 'h-full' : 'p-4'}>
           {activeTab === 'gallery' && (
-            <TemplateGallery
-              onSelectTemplate={loadGalleryTemplate}
-            />
+            <div className="fixed inset-0 z-50 bg-white">
+              <TemplateGallery
+                onSelectTemplate={loadGalleryTemplate}
+                onClose={() => setActiveTab('templates')}
+              />
+            </div>
           )}
 
           {activeTab === 'templates' && (

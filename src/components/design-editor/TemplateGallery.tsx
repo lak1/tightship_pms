@@ -8,7 +8,7 @@ import {
   searchTemplates,
   getTemplatesByCategory,
   type TemplateWithData,
-} from './templates'
+} from './templates/index'
 
 interface TemplateGalleryProps {
   onSelectTemplate: (template: TemplateWithData) => void
@@ -182,7 +182,7 @@ export default function TemplateGallery({ onSelectTemplate, onClose }: TemplateG
             </p>
           </div>
         ) : viewMode === 'grid' ? (
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          <div className="grid grid-cols-2 gap-6 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
             {filteredTemplates.map(template => (
               <TemplateCard
                 key={template.id}
@@ -221,29 +221,30 @@ function TemplateCard({
       className="group cursor-pointer overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm transition-all hover:shadow-lg"
     >
       {/* Template Preview */}
-      <div className="aspect-[3/4] bg-gradient-to-br from-gray-50 to-gray-100 p-8">
-        <div className="h-full w-full rounded border border-gray-200 bg-white p-4">
-          <div className="mb-3 text-center text-xs font-bold text-gray-800">MENU</div>
-          <div className="space-y-2">
-            <div className="h-1 w-12 bg-gray-300"></div>
-            <div className="h-2 w-full bg-gray-200"></div>
-            <div className="h-2 w-3/4 bg-gray-200"></div>
-            <div className="h-1 w-full bg-gray-100"></div>
+      <div className="aspect-[3/4] bg-gradient-to-br from-gray-50 to-gray-100 p-6">
+        <div className="h-full w-full rounded border border-gray-200 bg-white p-6 shadow-sm">
+          <div className="mb-4 text-center text-sm font-bold text-gray-800">MENU</div>
+          <div className="space-y-3">
+            <div className="h-2 w-16 bg-gray-300 rounded"></div>
+            <div className="h-3 w-full bg-gray-200 rounded"></div>
+            <div className="h-3 w-3/4 bg-gray-200 rounded"></div>
+            <div className="h-2 w-full bg-gray-100 rounded"></div>
+            <div className="h-2 w-2/3 bg-gray-100 rounded"></div>
           </div>
         </div>
       </div>
 
       {/* Template Info */}
       <div className="p-4">
-        <h3 className="font-semibold text-gray-900 group-hover:text-blue-600">
+        <h3 className="text-base font-semibold text-gray-900 group-hover:text-blue-600">
           {template.name}
         </h3>
-        <p className="mt-1 text-xs text-gray-500">{template.category.replace('-', ' ')}</p>
-        <div className="mt-2 flex flex-wrap gap-1">
-          {template.tags.slice(0, 3).map(tag => (
+        <p className="mt-1 text-sm text-gray-500 capitalize">{template.category.replace('-', ' ')}</p>
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {template.tags.slice(0, 2).map(tag => (
             <span
               key={tag}
-              className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600"
+              className="rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-600"
             >
               {tag}
             </span>
